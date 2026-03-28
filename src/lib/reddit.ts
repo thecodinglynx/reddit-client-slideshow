@@ -187,21 +187,38 @@ export async function fetchSourceMedia(
   };
 }
 
+export interface FetchResult {
+  items: MediaItem[];
+  afterTokens: Record<string, string | null>;
+}
+
 export async function fetchAllMedia(
   sourceMode: SourceMode,
   subreddits: string[],
   users: string[],
   sort: SortOrder,
   topTimeframe: string = "day",
-  showNsfw: boolean = false
-): Promise<MediaItem[]> {
+  showNsfw: boolean = false,
+  afterTokens: Record<string, string | null> = {},
+  seenIds: Set<string> = new Set()
+): Promise<FetchResult> {
   const sources =
     sourceMode === "subreddits"
       ? subreddits.map((name) => ({ type: "subreddit" as const, name }))
       : users.map((name) => ({ type: "user" as const, name }));
 
+  const newAfterTokens: Record<string, string | null> = { ...afterTokens };
+
   const results = await Promise.allSettled(
-    sources.map((source) => fetchSourceMedia(source, sort, topTimeframe))
+    sources.map(async (source) => {
+      const key = `${source.type}:${source.name}`;
+      // Skip sources that are exhausted (after explicitly set to null)
+      if (key in afterTokens && afterTokens[key] === null) return { items: [], key, after: null };
+      const after = afterTokens[key] ?? undefined;
+      const result = await fetchSourceMedia(source, sort, topTimeframe, after);
+      newAfterTokens[key] = result.after;
+      return { items: result.items, key, after: result.after };
+    })
   );
 
   let allItems: MediaItem[] = [];
@@ -211,8 +228,12 @@ export async function fetchAllMedia(
     }
   }
 
+  // Filter out already-seen items
+  if (seenIds.size > 0) {
+    allItems = allItems.filter((item) => !seenIds.has(item.id));
+  }
+
   if (!showNsfw) {
-    // Already filtered at the post level by Reddit, but just in case
     allItems = allItems.filter((item) => {
       const url = item.url.toLowerCase();
       return !url.includes("nsfw") && !url.includes("nsfl");
@@ -227,5 +248,5 @@ export async function fetchAllMedia(
     }
   }
 
-  return allItems;
+  return { items: allItems, afterTokens: newAfterTokens };
 }

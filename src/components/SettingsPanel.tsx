@@ -1,13 +1,21 @@
 "use client";
 
 import { SlideshowSettings, SortOrder, SourceMode } from "@/lib/types";
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+
+interface SubredditSuggestion {
+  name: string;
+  subscribers: number;
+  description: string;
+  over18: boolean;
+}
 
 interface SettingsPanelProps {
   settings: SlideshowSettings;
   onSave: (settings: SlideshowSettings) => void;
   onClose: () => void;
   isLoading: boolean;
+  likedCount: number;
 }
 
 export default function SettingsPanel({
@@ -15,16 +23,136 @@ export default function SettingsPanel({
   onSave,
   onClose,
   isLoading,
+  likedCount,
 }: SettingsPanelProps) {
   const [draft, setDraft] = useState<SlideshowSettings>({ ...settings });
   const [subredditInput, setSubredditInput] = useState("");
   const [userInput, setUserInput] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<SubredditSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionSeedIndex = useRef(0);
 
-  const addSubreddit = () => {
-    const name = subredditInput.trim().replace(/^\/?(r\/)?/, "");
-    if (name && !draft.subreddits.includes(name)) {
-      setDraft({ ...draft, subreddits: [...draft.subreddits, name] });
+  const fetchSuggestions = useCallback(async (query: string, append = false) => {
+    if (query.length < 2) {
+      if (!append) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+      return;
+    }
+    setSuggestionsLoading(true);
+    try {
+      const res = await fetch(`/api/reddit/search?q=${encodeURIComponent(query)}&limit=10`);
+      const data = await res.json();
+      const results = data.results as SubredditSuggestion[];
+
+      if (append) {
+        setSuggestions((prev) => {
+          const existingNames = new Set(prev.map((s) => s.name.toLowerCase()));
+          const newItems = results.filter(
+            (s) => !existingNames.has(s.name.toLowerCase()) &&
+                   !draft.subreddits.includes(s.name.toLowerCase())
+          );
+          const combined = [...prev, ...newItems];
+          setShowSuggestions(combined.length > 0);
+          return combined;
+        });
+      } else {
+        const filtered = results.filter(
+          (s) => !draft.subreddits.includes(s.name.toLowerCase()) &&
+                 s.name.toLowerCase() !== query.toLowerCase()
+        );
+        setSuggestions(filtered);
+        setShowSuggestions(filtered.length > 0);
+      }
+    } catch {
+      if (!append) setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [draft.subreddits]);
+
+  const loadMoreSuggestions = useCallback(() => {
+    if (draft.subreddits.length === 0) return;
+    suggestionSeedIndex.current = (suggestionSeedIndex.current + 1) % draft.subreddits.length;
+    const seed = draft.subreddits[suggestionSeedIndex.current];
+    fetchSuggestions(seed, true);
+  }, [draft.subreddits, fetchSuggestions]);
+
+  // Debounced search as user types
+  useEffect(() => {
+    setValidationError(null);
+    if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current);
+
+    const cleaned = subredditInput.trim().replace(/^\/?(r\/)?/, "");
+    if (cleaned.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    suggestionsTimer.current = setTimeout(() => {
+      fetchSuggestions(cleaned);
+    }, 400);
+
+    return () => {
+      if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current);
+    };
+  }, [subredditInput, fetchSuggestions]);
+
+  const validateAndAddSubreddit = async (name: string) => {
+    const cleaned = name.trim().replace(/^\/?(r\/)?/, "");
+    if (!cleaned) return;
+
+    if (draft.subreddits.includes(cleaned.toLowerCase())) {
+      setValidationError(`r/${cleaned} is already in your list`);
+      return;
+    }
+
+    setValidating(true);
+    setValidationError(null);
+
+    try {
+      const res = await fetch(`/api/reddit/about?subreddit=${encodeURIComponent(cleaned)}`);
+      const data = await res.json();
+
+      if (!data.exists) {
+        setValidationError(`r/${cleaned} doesn't exist or is private`);
+        setValidating(false);
+        return;
+      }
+
+      // Use the canonical name from Reddit
+      const canonicalName = data.name || cleaned;
+      if (draft.subreddits.includes(canonicalName.toLowerCase())) {
+        setValidationError(`r/${canonicalName} is already in your list`);
+        setValidating(false);
+        return;
+      }
+
+      setDraft((d) => ({ ...d, subreddits: [...d.subreddits, canonicalName.toLowerCase()] }));
       setSubredditInput("");
+      setSuggestions([]);
+      setShowSuggestions(false);
+
+      // Fetch suggestions based on the added subreddit
+      fetchSuggestions(canonicalName);
+    } catch {
+      setValidationError("Failed to verify subreddit. Try again.");
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const addSuggestion = (name: string) => {
+    const lower = name.toLowerCase();
+    if (!draft.subreddits.includes(lower)) {
+      setDraft((d) => ({ ...d, subreddits: [...d.subreddits, lower] }));
+      setSuggestions((prev) => prev.filter((s) => s.name.toLowerCase() !== lower));
     }
   };
 
@@ -50,20 +178,41 @@ export default function SettingsPanel({
     });
   };
 
+  // Load suggestions based on existing subreddits when panel opens
+  useEffect(() => {
+    if (draft.sourceMode === "subreddits" && draft.subreddits.length > 0 && suggestions.length === 0) {
+      // Pick a random existing subreddit to seed suggestions
+      const seed = draft.subreddits[Math.floor(Math.random() * draft.subreddits.length)];
+      fetchSuggestions(seed);
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const formatSubscribers = (count: number) => {
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+    if (count >= 1_000) return `${(count / 1_000).toFixed(0)}K`;
+    return String(count);
+  };
+
   const hasValidSource =
-    draft.sourceMode === "subreddits"
-      ? draft.subreddits.length > 0
-      : draft.users.length > 0;
+    draft.sourceMode === "liked"
+      ? likedCount > 0
+      : draft.sourceMode === "subreddits"
+        ? draft.subreddits.length > 0
+        : draft.users.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="p-6 space-y-6">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-auto">
+      <div className="bg-zinc-900 border border-zinc-800 sm:border-zinc-700 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg sm:mx-4 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="p-5 sm:p-6 space-y-5 sm:space-y-6">
+          {/* Header */}
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-white">Settings</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-white">Settings</h2>
             <button
               onClick={onClose}
-              className="text-zinc-400 hover:text-white transition-colors text-2xl leading-none"
+              className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all rounded-full text-xl leading-none"
+              aria-label="Close settings"
             >
               &times;
             </button>
@@ -71,21 +220,24 @@ export default function SettingsPanel({
 
           {/* Source mode toggle */}
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-zinc-400 mb-2 uppercase tracking-wider">
               Show posts from
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["subreddits", "users"] as SourceMode[]).map((mode) => (
+            <div className="grid grid-cols-3 gap-2">
+              {(["subreddits", "users", "liked"] as SourceMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setDraft({ ...draft, sourceMode: mode })}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
+                  disabled={mode === "liked" && likedCount === 0}
+                  className={`px-3 py-2.5 rounded-xl text-sm font-medium capitalize transition-all ${
                     draft.sourceMode === mode
-                      ? "bg-orange-600 text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      ? "bg-orange-600 text-white shadow-lg shadow-orange-600/20"
+                      : mode === "liked" && likedCount === 0
+                        ? "bg-zinc-800/40 text-zinc-600 cursor-not-allowed"
+                        : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 active:bg-zinc-600"
                   }`}
                 >
-                  {mode}
+                  {mode === "liked" ? `liked (${likedCount})` : mode}
                 </button>
               ))}
             </div>
@@ -94,67 +246,126 @@ export default function SettingsPanel({
           {/* Subreddits */}
           {draft.sourceMode === "subreddits" && (
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-zinc-400 mb-2 uppercase tracking-wider">
                 Subreddits
               </label>
               <div className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  value={subredditInput}
-                  onChange={(e) => setSubredditInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addSubreddit()}
-                  placeholder="e.g. earthporn"
-                  className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
-                />
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={subredditInput}
+                    onChange={(e) => setSubredditInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        validateAndAddSubreddit(subredditInput);
+                      }
+                    }}
+                    placeholder="e.g. earthporn"
+                    disabled={validating}
+                    className="w-full bg-zinc-800/80 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all disabled:opacity-50"
+                  />
+                </div>
                 <button
-                  onClick={addSubreddit}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors"
+                  onClick={() => validateAndAddSubreddit(subredditInput)}
+                  disabled={validating || !subredditInput.trim()}
+                  className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 active:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl text-sm font-medium transition-all"
                 >
-                  Add
+                  {validating ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    </span>
+                  ) : (
+                    "Add"
+                  )}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
+
+              {/* Validation error */}
+              {validationError && (
+                <p className="text-red-400 text-xs mb-2" role="alert">{validationError}</p>
+              )}
+
+              {/* Current subreddits */}
+              <div className="flex flex-wrap gap-2 mb-3">
                 {draft.subreddits.map((sub) => (
                   <span
                     key={sub}
-                    className="inline-flex items-center gap-1 bg-zinc-800 text-zinc-200 px-3 py-1 rounded-full text-sm"
+                    className="inline-flex items-center gap-1.5 bg-zinc-800/80 text-zinc-200 px-3 py-1.5 rounded-full text-xs sm:text-sm border border-zinc-700/50"
                   >
                     r/{sub}
                     <button
                       onClick={() => removeSubreddit(sub)}
-                      className="text-zinc-500 hover:text-red-400 ml-1"
+                      className="text-zinc-500 hover:text-red-400 active:text-red-300 ml-0.5 transition-colors"
+                      aria-label={`Remove r/${sub}`}
                     >
                       &times;
                     </button>
                   </span>
                 ))}
                 {draft.subreddits.length === 0 && (
-                  <p className="text-zinc-500 text-sm">
+                  <p className="text-zinc-600 text-sm">
                     Add at least one subreddit
                   </p>
                 )}
               </div>
+
+              {/* Suggestions */}
+              {(showSuggestions || suggestionsLoading) && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-zinc-500 uppercase tracking-wider">Suggestions</span>
+                    {suggestionsLoading && (
+                      <span className="w-3 h-3 border border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.name}
+                        onClick={() => addSuggestion(s.name)}
+                        className="group inline-flex items-center gap-1.5 bg-zinc-800/50 hover:bg-zinc-700/80 active:bg-zinc-600 border border-zinc-700/30 hover:border-orange-500/30 text-zinc-300 hover:text-white px-2.5 py-1.5 rounded-full text-xs transition-all"
+                        title={s.description || `r/${s.name}`}
+                      >
+                        <span className="text-orange-400/70 group-hover:text-orange-400">+</span>
+                        r/{s.name}
+                        <span className="text-zinc-600 text-[10px]">
+                          {formatSubscribers(s.subscribers)}
+                        </span>
+                      </button>
+                    ))}
+                    {draft.subreddits.length > 0 && !suggestionsLoading && (
+                      <button
+                        onClick={loadMoreSuggestions}
+                        className="inline-flex items-center gap-1 bg-zinc-800/30 hover:bg-zinc-700/60 active:bg-zinc-600 border border-dashed border-zinc-700/40 hover:border-orange-500/30 text-zinc-500 hover:text-zinc-300 px-2.5 py-1.5 rounded-full text-xs transition-all"
+                      >
+                        More...
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Users */}
           {draft.sourceMode === "users" && (
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-zinc-400 mb-2 uppercase tracking-wider">
                 Users
               </label>
-              <div className="flex gap-2 mb-2">
+              <div className="flex gap-2 mb-3">
                 <input
                   type="text"
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addUser()}
                   placeholder="e.g. shittymorph"
-                  className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
+                  className="flex-1 bg-zinc-800/80 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all"
                 />
                 <button
                   onClick={addUser}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 active:bg-orange-400 text-white rounded-xl text-sm font-medium transition-all"
                 >
                   Add
                 </button>
@@ -163,19 +374,20 @@ export default function SettingsPanel({
                 {draft.users.map((user) => (
                   <span
                     key={user}
-                    className="inline-flex items-center gap-1 bg-zinc-800 text-zinc-200 px-3 py-1 rounded-full text-sm"
+                    className="inline-flex items-center gap-1.5 bg-zinc-800/80 text-zinc-200 px-3 py-1.5 rounded-full text-xs sm:text-sm border border-zinc-700/50"
                   >
                     u/{user}
                     <button
                       onClick={() => removeUser(user)}
-                      className="text-zinc-500 hover:text-red-400 ml-1"
+                      className="text-zinc-500 hover:text-red-400 active:text-red-300 ml-0.5 transition-colors"
+                      aria-label={`Remove u/${user}`}
                     >
                       &times;
                     </button>
                   </span>
                 ))}
                 {draft.users.length === 0 && (
-                  <p className="text-zinc-500 text-sm">
+                  <p className="text-zinc-600 text-sm">
                     Add at least one user
                   </p>
                 )}
@@ -185,18 +397,18 @@ export default function SettingsPanel({
 
           {/* Sort order */}
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-zinc-400 mb-2 uppercase tracking-wider">
               Sort Order
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
               {(["hot", "new", "top", "rising"] as SortOrder[]).map((sort) => (
                 <button
                   key={sort}
                   onClick={() => setDraft({ ...draft, sortOrder: sort })}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
+                  className={`px-2 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium capitalize transition-all ${
                     draft.sortOrder === sort
-                      ? "bg-orange-600 text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      ? "bg-orange-600 text-white shadow-lg shadow-orange-600/20"
+                      : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 active:bg-zinc-600"
                   }`}
                 >
                   {sort}
@@ -208,20 +420,20 @@ export default function SettingsPanel({
           {/* Top timeframe */}
           {draft.sortOrder === "top" && (
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-zinc-400 mb-2 uppercase tracking-wider">
                 Time Period
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                 {(
                   ["hour", "day", "week", "month", "year", "all"] as const
                 ).map((t) => (
                   <button
                     key={t}
                     onClick={() => setDraft({ ...draft, topTimeframe: t })}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
+                    className={`px-2 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium capitalize transition-all ${
                       draft.topTimeframe === t
-                        ? "bg-orange-600 text-white"
-                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                        ? "bg-orange-600 text-white shadow-lg shadow-orange-600/20"
+                        : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 active:bg-zinc-600"
                     }`}
                   >
                     {t}
@@ -232,8 +444,8 @@ export default function SettingsPanel({
           )}
 
           {/* Duration settings */}
-          <div className="space-y-4">
-            <label className="block text-sm font-medium text-zinc-300">
+          <div className="space-y-3 sm:space-y-4">
+            <label className="block text-xs sm:text-sm font-medium text-zinc-400 uppercase tracking-wider">
               Display Duration (seconds)
             </label>
 
@@ -251,9 +463,9 @@ export default function SettingsPanel({
                       imageDuration: Number(e.target.value),
                     })
                   }
-                  className="w-32 accent-orange-500"
+                  className="w-24 sm:w-32 accent-orange-500"
                 />
-                <span className="text-sm text-zinc-300 w-8 text-right">
+                <span className="text-sm text-zinc-300 w-8 text-right tabular-nums">
                   {draft.imageDuration}s
                 </span>
               </div>
@@ -270,9 +482,9 @@ export default function SettingsPanel({
                   onChange={(e) =>
                     setDraft({ ...draft, gifDuration: Number(e.target.value) })
                   }
-                  className="w-32 accent-orange-500"
+                  className="w-24 sm:w-32 accent-orange-500"
                 />
-                <span className="text-sm text-zinc-300 w-8 text-right">
+                <span className="text-sm text-zinc-300 w-8 text-right tabular-nums">
                   {draft.gifDuration}s
                 </span>
               </div>
@@ -292,9 +504,9 @@ export default function SettingsPanel({
                       videoDuration: Number(e.target.value),
                     })
                   }
-                  className="w-32 accent-orange-500"
+                  className="w-24 sm:w-32 accent-orange-500"
                 />
-                <span className="text-sm text-zinc-300 w-8 text-right">
+                <span className="text-sm text-zinc-300 w-8 text-right tabular-nums">
                   {draft.videoDuration === 0 ? "Full" : `${draft.videoDuration}s`}
                 </span>
               </div>
@@ -309,9 +521,12 @@ export default function SettingsPanel({
               className={`relative w-11 h-6 rounded-full transition-colors ${
                 draft.showNsfw ? "bg-orange-600" : "bg-zinc-700"
               }`}
+              role="switch"
+              aria-checked={draft.showNsfw}
+              aria-label="Toggle NSFW content"
             >
               <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${
                   draft.showNsfw ? "translate-x-5" : ""
                 }`}
               />
@@ -319,19 +534,26 @@ export default function SettingsPanel({
           </div>
 
           {/* Action buttons */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-1">
             <button
               onClick={onClose}
-              className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+              className="flex-1 px-4 py-3 sm:py-2.5 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded-xl text-sm font-medium transition-all"
             >
               Cancel
             </button>
             <button
               onClick={() => onSave(draft)}
               disabled={!hasValidSource || isLoading}
-              className="flex-1 px-4 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex-1 px-4 py-3 sm:py-2.5 bg-orange-600 hover:bg-orange-500 active:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-orange-600/20 disabled:shadow-none"
             >
-              {isLoading ? "Loading..." : "Apply & Start"}
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Loading...
+                </span>
+              ) : (
+                "Apply & Start"
+              )}
             </button>
           </div>
         </div>

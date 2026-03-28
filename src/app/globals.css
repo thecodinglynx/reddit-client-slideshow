@@ -6,6 +6,8 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* Custom scrollbar for settings panel */
@@ -28,4 +30,27 @@ input[type="range"] {
   height: 4px;
   border-radius: 2px;
   cursor: pointer;
+}
+
+/* Toast animation */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.2s ease-out;
+}
+
+/* Swipe area for touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .touch-nav-area {
+    cursor: pointer;
+  }
 }

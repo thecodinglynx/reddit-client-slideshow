@@ -2,29 +2,98 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { MediaItem, SlideshowSettings, DEFAULT_SETTINGS } from "@/lib/types";
-import { fetchAllMedia } from "@/lib/reddit";
+import { fetchAllMedia, FetchResult } from "@/lib/reddit";
 import MediaRenderer from "./MediaRenderer";
 import SettingsPanel from "./SettingsPanel";
 
+const STORAGE_KEY = "reddit-slideshow-settings";
+const LIKES_KEY = "reddit-slideshow-likes";
+
+function loadSettings(): SlideshowSettings {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_SETTINGS, ...parsed };
+    }
+  } catch {}
+  return DEFAULT_SETTINGS;
+}
+
+function saveSettings(settings: SlideshowSettings) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {}
+}
+
+function loadLikes(): Map<string, MediaItem> {
+  if (typeof window === "undefined") return new Map();
+  try {
+    const stored = localStorage.getItem(LIKES_KEY);
+    if (stored) {
+      const arr: MediaItem[] = JSON.parse(stored);
+      return new Map(arr.map((item) => [item.id, item]));
+    }
+  } catch {}
+  return new Map();
+}
+
+function saveLikes(likes: Map<string, MediaItem>) {
+  try {
+    localStorage.setItem(LIKES_KEY, JSON.stringify([...likes.values()]));
+  } catch {}
+}
+
 export default function Slideshow() {
   const [settings, setSettings] = useState<SlideshowSettings>(DEFAULT_SETTINGS);
+  const [hydrated, setHydrated] = useState(false);
   const [items, setItems] = useState<MediaItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [showSettings, setShowSettings] = useState(true); // show on first load
+  const [showSettings, setShowSettings] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [showOverlay, setShowOverlay] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [likes, setLikes] = useState<Map<string, MediaItem>>(new Map());
+  const [viewingLikes, setViewingLikes] = useState(false);
+  const [fetchingMore, setFetchingMore] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoDurationRef = useRef<number | null>(null);
   const hideOverlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  // Pagination state
+  const afterTokensRef = useRef<Record<string, string | null>>({});
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const settingsRef = useRef<SlideshowSettings>(DEFAULT_SETTINGS);
 
   const currentItem = items[currentIndex] ?? null;
+
+  // Load settings and likes from localStorage on mount
+  useEffect(() => {
+    setSettings(loadSettings());
+    setLikes(loadLikes());
+    setHydrated(true);
+  }, []);
+
+  // Save settings to localStorage whenever they change
+  useEffect(() => {
+    if (hydrated) saveSettings(settings);
+    settingsRef.current = settings;
+  }, [settings, hydrated]);
+
+  // Save likes whenever they change
+  useEffect(() => {
+    if (hydrated) saveLikes(likes);
+  }, [likes, hydrated]);
 
   const getDuration = useCallback(() => {
     if (!currentItem) return 5;
@@ -41,26 +110,69 @@ export default function Slideshow() {
     }
   }, [currentItem, settings]);
 
+  // Fetch more posts when nearing the end
+  const fetchMore = useCallback(async () => {
+    if (fetchingMore || viewingLikes) return;
+    const s = settingsRef.current;
+    // Check if all sources are exhausted
+    const allExhausted = Object.values(afterTokensRef.current).every((v) => v === null);
+    if (allExhausted && Object.keys(afterTokensRef.current).length > 0) return;
+
+    setFetchingMore(true);
+    try {
+      const result: FetchResult = await fetchAllMedia(
+        s.sourceMode,
+        s.subreddits,
+        s.users,
+        s.sortOrder,
+        s.topTimeframe,
+        s.showNsfw,
+        afterTokensRef.current,
+        seenIdsRef.current
+      );
+      afterTokensRef.current = result.afterTokens;
+      if (result.items.length > 0) {
+        for (const item of result.items) {
+          seenIdsRef.current.add(item.id);
+        }
+        setItems((prev) => [...prev, ...result.items]);
+      }
+    } catch {
+      // Silently fail — user can still view existing items
+    } finally {
+      setFetchingMore(false);
+    }
+  }, [fetchingMore, viewingLikes]);
+
   const goNext = useCallback(() => {
     if (items.length === 0) return;
-    setCurrentIndex((i) => (i + 1) % items.length);
+    setCurrentIndex((i) => {
+      const next = (i + 1) % items.length;
+      // Fetch more when 5 items from the end
+      if (!viewingLikes && items.length - next <= 5) {
+        fetchMore();
+      }
+      return next;
+    });
     setProgress(0);
+    setMediaLoaded(false);
     videoDurationRef.current = null;
-  }, [items.length]);
+  }, [items.length, viewingLikes, fetchMore]);
 
   const goPrev = useCallback(() => {
     if (items.length === 0) return;
     setCurrentIndex((i) => (i - 1 + items.length) % items.length);
     setProgress(0);
+    setMediaLoaded(false);
     videoDurationRef.current = null;
   }, [items.length]);
 
-  // Auto-advance timer
+  // Auto-advance timer — only starts after media has loaded
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (progressRef.current) clearInterval(progressRef.current);
 
-    if (!isPlaying || items.length === 0) return;
+    if (!isPlaying || items.length === 0 || !mediaLoaded) return;
 
     const duration = getDuration() * 1000;
     const progressInterval = 50;
@@ -79,11 +191,12 @@ export default function Slideshow() {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (progressRef.current) clearInterval(progressRef.current);
     };
-  }, [isPlaying, currentIndex, items.length, getDuration, goNext]);
+  }, [isPlaying, currentIndex, items.length, getDuration, goNext, mediaLoaded]);
 
   // Keyboard controls
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (showSettings) return;
       switch (e.key) {
         case "ArrowRight":
         case " ":
@@ -97,6 +210,9 @@ export default function Slideshow() {
         case "p":
           setIsPlaying((p) => !p);
           break;
+        case "l":
+          if (currentItem) toggleLike(currentItem);
+          break;
         case "Escape":
           setShowSettings((s) => !s);
           break;
@@ -104,23 +220,54 @@ export default function Slideshow() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [goNext, goPrev]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goNext, goPrev, showSettings, currentItem]);
 
-  // Mouse movement shows overlay
+  // Mouse/touch shows overlay
   useEffect(() => {
-    const handler = () => {
+    const showHandler = () => {
       setShowOverlay(true);
       if (hideOverlayTimer.current) clearTimeout(hideOverlayTimer.current);
       hideOverlayTimer.current = setTimeout(() => {
         if (!showSettings) setShowOverlay(false);
       }, 3000);
     };
-    window.addEventListener("mousemove", handler);
+    window.addEventListener("mousemove", showHandler);
+    window.addEventListener("touchstart", showHandler, { passive: true });
     return () => {
-      window.removeEventListener("mousemove", handler);
+      window.removeEventListener("mousemove", showHandler);
+      window.removeEventListener("touchstart", showHandler);
       if (hideOverlayTimer.current) clearTimeout(hideOverlayTimer.current);
     };
   }, [showSettings]);
+
+  // Touch swipe navigation
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      if (showSettings) return;
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartX.current === null || touchStartY.current === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      const dy = e.changedTouches[0].clientY - touchStartY.current;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      if (absDx > 50 && absDx > absDy * 1.5) {
+        if (dx < 0) goNext();
+        else goPrev();
+      }
+      touchStartX.current = null;
+      touchStartY.current = null;
+    };
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [goNext, goPrev, showSettings]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -146,11 +293,47 @@ export default function Slideshow() {
     showToast(`Added u/${name}`);
   }, [settings.users, showToast]);
 
+  const toggleLike = useCallback((item: MediaItem) => {
+    setLikes((prev) => {
+      const next = new Map(prev);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+        showToast("Removed from likes");
+      } else {
+        next.set(item.id, item);
+        showToast("Added to likes");
+      }
+      return next;
+    });
+  }, [showToast]);
+
   const loadMedia = async (newSettings: SlideshowSettings) => {
     setIsLoading(true);
     setError(null);
+    setViewingLikes(false);
     try {
-      const mediaItems = await fetchAllMedia(
+      if (newSettings.sourceMode === "liked") {
+        const likedItems = [...likes.values()];
+        if (likedItems.length === 0) {
+          setError("No liked posts yet. Like some posts first!");
+          return;
+        }
+        setViewingLikes(true);
+        setItems(likedItems);
+        setCurrentIndex(0);
+        setProgress(0);
+        setMediaLoaded(false);
+        setSettings(newSettings);
+        setShowSettings(false);
+        setIsPlaying(true);
+        return;
+      }
+
+      // Reset pagination state
+      afterTokensRef.current = {};
+      seenIdsRef.current = new Set();
+
+      const result = await fetchAllMedia(
         newSettings.sourceMode,
         newSettings.subreddits,
         newSettings.users,
@@ -158,13 +341,21 @@ export default function Slideshow() {
         newSettings.topTimeframe,
         newSettings.showNsfw
       );
-      if (mediaItems.length === 0) {
-        setError("No media found in the selected subreddits. Try different ones.");
+      if (result.items.length === 0) {
+        setError("No media found. Try different sources.");
         return;
       }
-      setItems(mediaItems);
+
+      // Track pagination tokens and seen IDs
+      afterTokensRef.current = result.afterTokens;
+      for (const item of result.items) {
+        seenIdsRef.current.add(item.id);
+      }
+
+      setItems(result.items);
       setCurrentIndex(0);
       setProgress(0);
+      setMediaLoaded(false);
       setSettings(newSettings);
       setShowSettings(false);
       setIsPlaying(true);
@@ -179,86 +370,111 @@ export default function Slideshow() {
     videoDurationRef.current = duration;
   }, []);
 
+  const handleMediaLoaded = useCallback(() => {
+    setMediaLoaded(true);
+  }, []);
+
+  const isLiked = currentItem ? likes.has(currentItem.id) : false;
+
   return (
-    <div className="fixed inset-0 bg-black">
+    <div className="fixed inset-0 bg-black select-none pointer-events-none">
       {/* Main media display */}
       {currentItem && (
-        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+        <div className="absolute inset-0" style={{ zIndex: 0 }}>
           <MediaRenderer
             key={currentItem.id}
             item={currentItem}
             isActive={isPlaying && !showSettings}
             onDurationKnown={handleVideoDuration}
+            onLoaded={handleMediaLoaded}
           />
         </div>
       )}
 
       {/* Empty state */}
       {items.length === 0 && !showSettings && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center px-6">
           <div className="text-center text-zinc-400">
-            <p className="text-2xl mb-4">Reddit Slideshow</p>
-            <p>Press <kbd className="px-2 py-1 bg-zinc-800 rounded text-sm">Esc</kbd> to open settings</p>
+            <p className="text-2xl sm:text-3xl mb-4 font-light tracking-tight">Reddit Slideshow</p>
+            <p className="text-sm sm:text-base">
+              Press <kbd className="px-2 py-1 bg-zinc-800 rounded text-xs">Esc</kbd> to open settings
+            </p>
+            <p className="text-xs text-zinc-600 mt-2 sm:hidden">or tap the screen</p>
           </div>
         </div>
       )}
 
       {/* Progress bar */}
       {items.length > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-900/50">
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 sm:h-1 bg-zinc-900/50" style={{ zIndex: 20 }}>
           <div
-            className="h-full bg-orange-500 transition-[width] duration-75 ease-linear"
+            className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-[width] duration-75 ease-linear"
             style={{ width: `${progress * 100}%` }}
           />
         </div>
       )}
 
-      {/* Overlay controls */}
+      {/* Top overlay */}
       <div
         style={{ zIndex: 10 }}
         className={`absolute inset-x-0 top-0 transition-opacity duration-300 ${
-          showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
+          showOverlay ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       >
-        {/* Top bar with post info */}
         {currentItem && (
-          <div className="bg-gradient-to-b from-black/80 to-transparent p-4 pb-12">
-            <div className="flex items-start justify-between gap-4">
+          <div className="bg-gradient-to-b from-black/80 via-black/40 to-transparent p-3 sm:p-4 pb-10 sm:pb-12">
+            <div className="flex items-start justify-between gap-3 sm:gap-4">
               <div className="min-w-0 flex-1">
-                <p className="text-white font-medium truncate">
+                <p className="text-white font-medium text-sm sm:text-base line-clamp-2 sm:truncate leading-snug">
                   {currentItem.title}
                 </p>
-                <div className="text-zinc-400 text-sm mt-1 flex items-center gap-1 flex-wrap">
+                <div className="text-zinc-400 text-xs sm:text-sm mt-1 flex items-center gap-1.5 flex-wrap">
                   <button
                     onClick={() => addSubreddit(currentItem.subreddit)}
-                    className="hover:text-orange-400 transition-colors cursor-pointer"
+                    className="hover:text-orange-400 active:text-orange-300 transition-colors cursor-pointer"
                     title={`Add r/${currentItem.subreddit} to subreddit list`}
                   >
                     r/{currentItem.subreddit}
                   </button>
-                  <span>&middot;</span>
+                  <span className="text-zinc-600">&middot;</span>
                   <button
                     onClick={() => addUser(currentItem.author)}
-                    className="hover:text-orange-400 transition-colors cursor-pointer"
+                    className="hover:text-orange-400 active:text-orange-300 transition-colors cursor-pointer"
                     title={`Add u/${currentItem.author} to user list`}
                   >
                     u/{currentItem.author}
                   </button>
-                  <span>&middot;</span>
+                  <span className="text-zinc-600">&middot;</span>
                   <span>{currentItem.score.toLocaleString()} pts</span>
-                  <span className="text-zinc-500">
+                  <span className="text-zinc-600 hidden sm:inline">
                     [{currentItem.type}]
                   </span>
                 </div>
               </div>
-              <a
-                href={`https://reddit.com${currentItem.permalink}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 text-zinc-400 hover:text-orange-400 text-sm transition-colors"
-              >
-                Open on Reddit &rarr;
-              </a>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => toggleLike(currentItem)}
+                  className={`p-1.5 sm:p-2 rounded-full transition-all active:scale-90 ${
+                    isLiked
+                      ? "text-red-500 hover:text-red-400"
+                      : "text-zinc-500 hover:text-red-400"
+                  }`}
+                  title="Like (L)"
+                  aria-label={isLiked ? "Unlike this post" : "Like this post"}
+                >
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                </button>
+                <a
+                  href={`https://reddit.com${currentItem.permalink}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden sm:block text-zinc-500 hover:text-orange-400 text-xs transition-colors"
+                >
+                  Open on Reddit &rarr;
+                </a>
+              </div>
             </div>
           </div>
         )}
@@ -268,33 +484,35 @@ export default function Slideshow() {
       <div
         style={{ zIndex: 10 }}
         className={`absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
-          showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
+          showOverlay ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="bg-gradient-to-t from-black/80 to-transparent p-4 pt-12">
-          <div className="flex items-center justify-center gap-4">
+        <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 sm:p-4 pt-10 sm:pt-12">
+          <div className="flex items-center justify-center gap-2 sm:gap-4">
             <button
               onClick={goPrev}
-              className="p-2 text-zinc-300 hover:text-white transition-colors"
+              className="p-2 sm:p-2.5 text-zinc-300 hover:text-white active:scale-95 transition-all rounded-full hover:bg-white/5"
               title="Previous (Left arrow)"
+              aria-label="Previous slide"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
             </button>
 
             <button
               onClick={() => setIsPlaying((p) => !p)}
-              className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+              className="p-2.5 sm:p-3 bg-white/10 hover:bg-white/20 active:bg-white/25 active:scale-95 rounded-full text-white transition-all backdrop-blur-sm"
               title="Play/Pause (P)"
+              aria-label={isPlaying ? "Pause slideshow" : "Play slideshow"}
             >
               {isPlaying ? (
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
                   <rect x="6" y="4" width="4" height="16" rx="1" />
                   <rect x="14" y="4" width="4" height="16" rx="1" />
                 </svg>
               ) : (
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
                 </svg>
               )}
@@ -302,29 +520,33 @@ export default function Slideshow() {
 
             <button
               onClick={goNext}
-              className="p-2 text-zinc-300 hover:text-white transition-colors"
+              className="p-2 sm:p-2.5 text-zinc-300 hover:text-white active:scale-95 transition-all rounded-full hover:bg-white/5"
               title="Next (Right arrow)"
+              aria-label="Next slide"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </button>
 
-            <span className="text-zinc-400 text-sm ml-4">
+            <span className="text-zinc-500 text-xs sm:text-sm ml-2 sm:ml-4 tabular-nums">
               {currentIndex + 1} / {items.length}
+              {fetchingMore && <span className="ml-1 text-orange-400">+</span>}
             </span>
 
             <button
               onClick={() => setShowSettings(true)}
-              className="ml-4 p-2 text-zinc-300 hover:text-white transition-colors"
+              className="ml-1 sm:ml-2 p-2 sm:p-2.5 text-zinc-300 hover:text-white active:scale-95 transition-all rounded-full hover:bg-white/5"
               title="Settings (Esc)"
+              aria-label="Open settings"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </button>
           </div>
+
         </div>
       </div>
 
@@ -335,19 +557,26 @@ export default function Slideshow() {
           onSave={loadMedia}
           onClose={() => setShowSettings(false)}
           isLoading={isLoading}
+          likedCount={likes.size}
         />
       )}
 
       {/* Error display */}
       {error && !showSettings && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-900/80 border border-red-700 text-red-200 px-4 py-2 rounded-lg text-sm">
+        <div
+          style={{ zIndex: 30 }}
+          className="absolute top-4 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 bg-red-950/90 border border-red-800/60 text-red-200 px-4 py-3 rounded-xl text-sm backdrop-blur-sm"
+        >
           {error}
         </div>
       )}
 
       {/* Toast notification */}
       {toast && (
-        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-zinc-800/90 border border-zinc-600 text-zinc-200 px-4 py-2 rounded-lg text-sm animate-fade-in">
+        <div
+          style={{ zIndex: 30 }}
+          className="absolute bottom-14 sm:bottom-16 left-1/2 -translate-x-1/2 bg-zinc-800/95 border border-zinc-700/50 text-zinc-200 px-4 py-2 rounded-full text-xs sm:text-sm backdrop-blur-sm animate-toast-in whitespace-nowrap shadow-lg"
+        >
           {toast}
         </div>
       )}

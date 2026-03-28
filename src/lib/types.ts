@@ -84,7 +84,7 @@ export interface MediaItem {
 
 export type SortOrder = "hot" | "new" | "top" | "rising";
 
-export type SourceMode = "subreddits" | "users";
+export type SourceMode = "subreddits" | "users" | "liked";
 
 export interface SlideshowSettings {
   sourceMode: SourceMode;

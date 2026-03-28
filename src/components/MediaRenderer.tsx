@@ -6,12 +6,14 @@ import { useEffect, useRef, useState } from "react";
 interface MediaRendererProps {
   item: MediaItem;
   onDurationKnown?: (duration: number) => void;
+  onLoaded?: () => void;
   isActive: boolean;
 }
 
 export default function MediaRenderer({
   item,
   onDurationKnown,
+  onLoaded,
   isActive,
 }: MediaRendererProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,6 +61,7 @@ export default function MediaRenderer({
           onLoadedMetadata={(e) => {
             const el = e.currentTarget;
             setLoaded(true);
+            onLoaded?.();
             if (onDurationKnown && el.duration && isFinite(el.duration)) {
               onDurationKnown(el.duration);
             }
@@ -82,7 +85,7 @@ export default function MediaRenderer({
         src={item.url}
         alt={item.title}
         className={`max-w-full max-h-full object-contain transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => { setLoaded(true); onLoaded?.(); }}
         onError={() => setError(true)}
       />
       {!loaded && (
