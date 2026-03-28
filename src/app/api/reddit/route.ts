@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { redditFetch } from "@/lib/reddit-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -28,19 +29,15 @@ export async function GET(request: NextRequest) {
   if (sort === "top") params.set("t", t);
   if (after) params.set("after", after);
 
-  const url = user
-    ? `https://www.reddit.com/user/${encodeURIComponent(user)}/submitted/${sort}.json?${params}`
-    : `https://www.reddit.com/r/${encodeURIComponent(subreddit!)}/${sort}.json?${params}`;
+  const path = user
+    ? `/user/${encodeURIComponent(user)}/submitted/${sort}.json?${params}`
+    : `/r/${encodeURIComponent(subreddit!)}/${sort}.json?${params}`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "reddit-slideshow-client/1.0 (server-proxy)" },
-      signal: controller.signal,
-      cache: "no-store",
-    });
+    const res = await redditFetch(path);
     clearTimeout(timeout);
 
     if (!res.ok) {

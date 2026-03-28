@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { redditFetch } from "@/lib/reddit-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,21 +11,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid subreddit name" }, { status: 400 });
   }
 
-  const url = `https://www.reddit.com/r/${encodeURIComponent(subreddit)}/about.json?raw_json=1`;
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "reddit-slideshow-client/1.0 (server-proxy)" },
-      signal: controller.signal,
-      cache: "no-store",
-      redirect: "manual",
-    });
+    const res = await redditFetch(`/r/${encodeURIComponent(subreddit)}/about.json?raw_json=1`);
     clearTimeout(timeout);
 
-    // Reddit redirects non-existent subreddits to a search page
     if (!res.ok || res.status >= 300) {
       return NextResponse.json({ exists: false }, { status: 200 });
     }

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import AuthProvider from "@/components/providers/AuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,7 +22,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased overflow-hidden">{children}</body>
+      <body className="antialiased overflow-hidden">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

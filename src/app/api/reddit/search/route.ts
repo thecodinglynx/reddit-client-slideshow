@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { redditFetch } from "@/lib/reddit-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,17 +17,11 @@ export async function GET(request: NextRequest) {
     raw_json: "1",
   });
 
-  const url = `https://www.reddit.com/subreddits/search.json?${params}`;
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "reddit-slideshow-client/1.0 (server-proxy)" },
-      signal: controller.signal,
-      cache: "no-store",
-    });
+    const res = await redditFetch(`/subreddits/search.json?${params}`);
     clearTimeout(timeout);
 
     if (!res.ok) {

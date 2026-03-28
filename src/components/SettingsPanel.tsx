@@ -2,6 +2,7 @@
 
 import { SlideshowSettings, SortOrder, SourceMode } from "@/lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
 
 interface SubredditSuggestion {
   name: string;
@@ -16,6 +17,51 @@ interface SettingsPanelProps {
   onClose: () => void;
   isLoading: boolean;
   likedCount: number;
+}
+
+function AccountSection() {
+  const { data: session, status } = useSession();
+
+  if (status === "loading") return null;
+
+  if (!session) {
+    return (
+      <div className="flex items-center justify-between py-2 px-1">
+        <span className="text-sm text-zinc-500">
+          Sign in to sync across devices
+        </span>
+        <button
+          onClick={() => signIn("google")}
+          className="text-sm text-orange-400 hover:text-orange-300 font-medium transition-colors"
+        >
+          Sign in
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between py-2 px-1">
+      <div className="flex items-center gap-2 min-w-0">
+        {session.user?.image && (
+          <img
+            src={session.user.image}
+            alt=""
+            className="w-6 h-6 rounded-full shrink-0"
+          />
+        )}
+        <span className="text-sm text-zinc-300 truncate">
+          {session.user?.name || session.user?.email}
+        </span>
+      </div>
+      <button
+        onClick={() => signOut()}
+        className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 ml-2"
+      >
+        Sign out
+      </button>
+    </div>
+  );
 }
 
 export default function SettingsPanel({
@@ -532,6 +578,9 @@ export default function SettingsPanel({
               />
             </button>
           </div>
+
+          {/* Account */}
+          <AccountSection />
 
           {/* Action buttons */}
           <div className="flex gap-3 pt-1">
