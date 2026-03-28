@@ -5,21 +5,32 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const subreddit = searchParams.get("subreddit");
+  const user = searchParams.get("user");
   const sort = searchParams.get("sort") || "hot";
   const limit = searchParams.get("limit") || "50";
   const t = searchParams.get("t") || "day";
   const after = searchParams.get("after") || "";
   const raw_json = "1";
 
-  if (!subreddit || !/^[a-zA-Z0-9_]{1,50}$/.test(subreddit)) {
+  const namePattern = /^[a-zA-Z0-9_-]{1,50}$/;
+
+  if (!subreddit && !user) {
+    return NextResponse.json({ error: "Must provide subreddit or user" }, { status: 400 });
+  }
+  if (subreddit && !namePattern.test(subreddit)) {
     return NextResponse.json({ error: "Invalid subreddit name" }, { status: 400 });
+  }
+  if (user && !namePattern.test(user)) {
+    return NextResponse.json({ error: "Invalid username" }, { status: 400 });
   }
 
   const params = new URLSearchParams({ limit, raw_json });
   if (sort === "top") params.set("t", t);
   if (after) params.set("after", after);
 
-  const url = `https://www.reddit.com/r/${encodeURIComponent(subreddit)}/${sort}.json?${params}`;
+  const url = user
+    ? `https://www.reddit.com/user/${encodeURIComponent(user)}/submitted/${sort}.json?${params}`
+    : `https://www.reddit.com/r/${encodeURIComponent(subreddit!)}/${sort}.json?${params}`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);

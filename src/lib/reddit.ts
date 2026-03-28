@@ -1,4 +1,4 @@
-import { RedditPost, MediaItem, MediaType, SortOrder } from "./types";
+import { RedditPost, MediaItem, MediaType, SortOrder, SourceMode } from "./types";
 
 
 function decodeHtmlEntities(str: string): string {
@@ -135,18 +135,22 @@ function extractMedia(post: RedditPost): MediaItem | MediaItem[] | null {
   return null;
 }
 
-export async function fetchSubredditMedia(
-  subreddit: string,
+export async function fetchSourceMedia(
+  source: { type: "subreddit"; name: string } | { type: "user"; name: string },
   sort: SortOrder,
   topTimeframe: string = "day",
   after?: string,
   limit: number = 50
 ): Promise<{ items: MediaItem[]; after: string | null }> {
   const params = new URLSearchParams({
-    subreddit,
     sort,
     limit: String(limit),
   });
+  if (source.type === "subreddit") {
+    params.set("subreddit", source.name);
+  } else {
+    params.set("user", source.name);
+  }
   if (sort === "top") {
     params.set("t", topTimeframe);
   }
@@ -184,13 +188,20 @@ export async function fetchSubredditMedia(
 }
 
 export async function fetchAllMedia(
+  sourceMode: SourceMode,
   subreddits: string[],
+  users: string[],
   sort: SortOrder,
   topTimeframe: string = "day",
   showNsfw: boolean = false
 ): Promise<MediaItem[]> {
+  const sources =
+    sourceMode === "subreddits"
+      ? subreddits.map((name) => ({ type: "subreddit" as const, name }))
+      : users.map((name) => ({ type: "user" as const, name }));
+
   const results = await Promise.allSettled(
-    subreddits.map((sub) => fetchSubredditMedia(sub, sort, topTimeframe))
+    sources.map((source) => fetchSourceMedia(source, sort, topTimeframe))
   );
 
   let allItems: MediaItem[] = [];
@@ -208,8 +219,8 @@ export async function fetchAllMedia(
     });
   }
 
-  // Shuffle for variety when combining multiple subreddits
-  if (subreddits.length > 1) {
+  // Shuffle for variety when combining multiple sources
+  if (sources.length > 1) {
     for (let i = allItems.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [allItems[i], allItems[j]] = [allItems[j], allItems[i]];

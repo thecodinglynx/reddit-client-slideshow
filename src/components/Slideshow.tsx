@@ -16,6 +16,8 @@ export default function Slideshow() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -120,12 +122,38 @@ export default function Slideshow() {
     };
   }, [showSettings]);
 
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2000);
+  }, []);
+
+  const addSubreddit = useCallback((name: string) => {
+    if (settings.subreddits.includes(name)) {
+      showToast(`r/${name} already in list`);
+      return;
+    }
+    setSettings((s) => ({ ...s, subreddits: [...s.subreddits, name] }));
+    showToast(`Added r/${name}`);
+  }, [settings.subreddits, showToast]);
+
+  const addUser = useCallback((name: string) => {
+    if (settings.users.includes(name)) {
+      showToast(`u/${name} already in list`);
+      return;
+    }
+    setSettings((s) => ({ ...s, users: [...s.users, name] }));
+    showToast(`Added u/${name}`);
+  }, [settings.users, showToast]);
+
   const loadMedia = async (newSettings: SlideshowSettings) => {
     setIsLoading(true);
     setError(null);
     try {
       const mediaItems = await fetchAllMedia(
+        newSettings.sourceMode,
         newSettings.subreddits,
+        newSettings.users,
         newSettings.sortOrder,
         newSettings.topTimeframe,
         newSettings.showNsfw
@@ -155,7 +183,7 @@ export default function Slideshow() {
     <div className="fixed inset-0 bg-black">
       {/* Main media display */}
       {currentItem && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
           <MediaRenderer
             key={currentItem.id}
             item={currentItem}
@@ -187,6 +215,7 @@ export default function Slideshow() {
 
       {/* Overlay controls */}
       <div
+        style={{ zIndex: 10 }}
         className={`absolute inset-x-0 top-0 transition-opacity duration-300 ${
           showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
@@ -199,13 +228,28 @@ export default function Slideshow() {
                 <p className="text-white font-medium truncate">
                   {currentItem.title}
                 </p>
-                <p className="text-zinc-400 text-sm mt-1">
-                  r/{currentItem.subreddit} &middot; u/{currentItem.author} &middot;{" "}
-                  {currentItem.score.toLocaleString()} pts
-                  <span className="ml-2 text-zinc-500">
+                <div className="text-zinc-400 text-sm mt-1 flex items-center gap-1 flex-wrap">
+                  <button
+                    onClick={() => addSubreddit(currentItem.subreddit)}
+                    className="hover:text-orange-400 transition-colors cursor-pointer"
+                    title={`Add r/${currentItem.subreddit} to subreddit list`}
+                  >
+                    r/{currentItem.subreddit}
+                  </button>
+                  <span>&middot;</span>
+                  <button
+                    onClick={() => addUser(currentItem.author)}
+                    className="hover:text-orange-400 transition-colors cursor-pointer"
+                    title={`Add u/${currentItem.author} to user list`}
+                  >
+                    u/{currentItem.author}
+                  </button>
+                  <span>&middot;</span>
+                  <span>{currentItem.score.toLocaleString()} pts</span>
+                  <span className="text-zinc-500">
                     [{currentItem.type}]
                   </span>
-                </p>
+                </div>
               </div>
               <a
                 href={`https://reddit.com${currentItem.permalink}`}
@@ -222,6 +266,7 @@ export default function Slideshow() {
 
       {/* Bottom overlay controls */}
       <div
+        style={{ zIndex: 10 }}
         className={`absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
           showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
@@ -297,6 +342,13 @@ export default function Slideshow() {
       {error && !showSettings && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-900/80 border border-red-700 text-red-200 px-4 py-2 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-zinc-800/90 border border-zinc-600 text-zinc-200 px-4 py-2 rounded-lg text-sm animate-fade-in">
+          {toast}
         </div>
       )}
     </div>

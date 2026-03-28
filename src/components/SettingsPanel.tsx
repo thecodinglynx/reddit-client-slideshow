@@ -1,6 +1,6 @@
 "use client";
 
-import { SlideshowSettings, SortOrder } from "@/lib/types";
+import { SlideshowSettings, SortOrder, SourceMode } from "@/lib/types";
 import { useState } from "react";
 
 interface SettingsPanelProps {
@@ -18,6 +18,7 @@ export default function SettingsPanel({
 }: SettingsPanelProps) {
   const [draft, setDraft] = useState<SlideshowSettings>({ ...settings });
   const [subredditInput, setSubredditInput] = useState("");
+  const [userInput, setUserInput] = useState("");
 
   const addSubreddit = () => {
     const name = subredditInput.trim().replace(/^\/?(r\/)?/, "");
@@ -34,6 +35,26 @@ export default function SettingsPanel({
     });
   };
 
+  const addUser = () => {
+    const name = userInput.trim().replace(/^\/?(u\/)?/, "");
+    if (name && !draft.users.includes(name)) {
+      setDraft({ ...draft, users: [...draft.users, name] });
+      setUserInput("");
+    }
+  };
+
+  const removeUser = (user: string) => {
+    setDraft({
+      ...draft,
+      users: draft.users.filter((u) => u !== user),
+    });
+  };
+
+  const hasValidSource =
+    draft.sourceMode === "subreddits"
+      ? draft.subreddits.length > 0
+      : draft.users.length > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
@@ -48,49 +69,119 @@ export default function SettingsPanel({
             </button>
           </div>
 
-          {/* Subreddits */}
+          {/* Source mode toggle */}
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Subreddits
+              Show posts from
             </label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={subredditInput}
-                onChange={(e) => setSubredditInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addSubreddit()}
-                placeholder="e.g. earthporn"
-                className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
-              />
-              <button
-                onClick={addSubreddit}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Add
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {draft.subreddits.map((sub) => (
-                <span
-                  key={sub}
-                  className="inline-flex items-center gap-1 bg-zinc-800 text-zinc-200 px-3 py-1 rounded-full text-sm"
+            <div className="grid grid-cols-2 gap-2">
+              {(["subreddits", "users"] as SourceMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setDraft({ ...draft, sourceMode: mode })}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
+                    draft.sourceMode === mode
+                      ? "bg-orange-600 text-white"
+                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                  }`}
                 >
-                  r/{sub}
-                  <button
-                    onClick={() => removeSubreddit(sub)}
-                    className="text-zinc-500 hover:text-red-400 ml-1"
-                  >
-                    &times;
-                  </button>
-                </span>
+                  {mode}
+                </button>
               ))}
-              {draft.subreddits.length === 0 && (
-                <p className="text-zinc-500 text-sm">
-                  Add at least one subreddit
-                </p>
-              )}
             </div>
           </div>
+
+          {/* Subreddits */}
+          {draft.sourceMode === "subreddits" && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Subreddits
+              </label>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={subredditInput}
+                  onChange={(e) => setSubredditInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addSubreddit()}
+                  placeholder="e.g. earthporn"
+                  className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
+                />
+                <button
+                  onClick={addSubreddit}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {draft.subreddits.map((sub) => (
+                  <span
+                    key={sub}
+                    className="inline-flex items-center gap-1 bg-zinc-800 text-zinc-200 px-3 py-1 rounded-full text-sm"
+                  >
+                    r/{sub}
+                    <button
+                      onClick={() => removeSubreddit(sub)}
+                      className="text-zinc-500 hover:text-red-400 ml-1"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+                {draft.subreddits.length === 0 && (
+                  <p className="text-zinc-500 text-sm">
+                    Add at least one subreddit
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Users */}
+          {draft.sourceMode === "users" && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Users
+              </label>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addUser()}
+                  placeholder="e.g. shittymorph"
+                  className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
+                />
+                <button
+                  onClick={addUser}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {draft.users.map((user) => (
+                  <span
+                    key={user}
+                    className="inline-flex items-center gap-1 bg-zinc-800 text-zinc-200 px-3 py-1 rounded-full text-sm"
+                  >
+                    u/{user}
+                    <button
+                      onClick={() => removeUser(user)}
+                      className="text-zinc-500 hover:text-red-400 ml-1"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+                {draft.users.length === 0 && (
+                  <p className="text-zinc-500 text-sm">
+                    Add at least one user
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Sort order */}
           <div>
@@ -237,7 +328,7 @@ export default function SettingsPanel({
             </button>
             <button
               onClick={() => onSave(draft)}
-              disabled={draft.subreddits.length === 0 || isLoading}
+              disabled={!hasValidSource || isLoading}
               className="flex-1 px-4 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
             >
               {isLoading ? "Loading..." : "Apply & Start"}

@@ -50,7 +50,7 @@ export default function MediaRenderer({
         <video
           ref={videoRef}
           src={item.url}
-          className={`max-w-full max-h-full object-contain transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
+          className={`max-w-full max-h-full object-contain transition-opacity duration-500 pointer-events-auto ${loaded ? "opacity-100" : "opacity-0"}`}
           autoPlay={isActive}
           muted={item.type === "gif"}
           loop={item.type === "gif"}
