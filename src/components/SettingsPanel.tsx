@@ -73,6 +73,9 @@ export default function SettingsPanel({
   likedCount,
 }: SettingsPanelProps) {
   const [draft, setDraft] = useState<SlideshowSettings>({ ...settings });
+  useEffect(() => {
+    setDraft({ ...settings });
+  }, [settings]);
   const [subredditInput, setSubredditInput] = useState("");
   const [userInput, setUserInput] = useState("");
   const [validating, setValidating] = useState(false);
