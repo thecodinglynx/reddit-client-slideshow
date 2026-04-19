@@ -47,25 +47,16 @@ export async function loadSettings(
   isAuthenticated: boolean
 ): Promise<SlideshowSettings> {
   if (isAuthenticated) {
-    console.log("Loading settings from database (authenticated user)");
     try {
       const res = await fetch("/api/user/settings");
-      console.log("Settings API response status:", res.status);
-
       const data = await res.json();
-      console.log("Settings API response data:", data);
-
       if (data.settings) {
         const settings = { ...DEFAULT_SETTINGS, ...data.settings };
-        writeLocalSettings(settings); // keep local cache in sync
-        console.log("Loaded settings from DB:", settings);
+        writeLocalSettings(settings);
         return settings;
       }
-    } catch (error) {
-      console.error("Failed to load settings from database:", error);
-    }
+    } catch { /* fall through to localStorage */ }
   }
-  console.log("Falling back to localStorage settings");
   return readLocalSettings();
 }
 
@@ -73,29 +64,20 @@ export async function saveSettings(
   settings: SlideshowSettings,
   isAuthenticated: boolean
 ): Promise<void> {
-  console.log("Saving settings, authenticated:", isAuthenticated);
-  writeLocalSettings(settings); // always cache locally
+  writeLocalSettings(settings);
   if (isAuthenticated) {
-    console.log("Attempting to save settings to database");
     try {
       const res = await fetch("/api/user/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings }),
       });
-      console.log("Save settings API response status:", res.status);
-
       if (!res.ok) {
-        const errorData = await res.json();
-        console.error("Failed to save settings to database:", errorData);
-      } else {
-        console.log("Settings saved to database successfully");
+        console.error("Failed to save settings to database:", res.status);
       }
     } catch (error) {
       console.error("Error saving settings to database:", error);
     }
-  } else {
-    console.log("Not authenticated, settings saved to localStorage only");
   }
 }
 
@@ -110,7 +92,7 @@ export async function loadLikes(
         const map = new Map<string, MediaItem>(
           data.likes.map((item: MediaItem) => [item.id, item])
         );
-        writeLocalLikes(map); // keep local cache in sync
+        writeLocalLikes(map);
         return map;
       }
     } catch { /* fall through to localStorage */ }
@@ -122,7 +104,6 @@ export async function addLike(
   item: MediaItem,
   isAuthenticated: boolean
 ): Promise<void> {
-  // Update localStorage immediately
   const local = readLocalLikes();
   local.set(item.id, item);
   writeLocalLikes(local);
@@ -142,7 +123,6 @@ export async function removeLike(
   postId: string,
   isAuthenticated: boolean
 ): Promise<void> {
-  // Update localStorage immediately
   const local = readLocalLikes();
   local.delete(postId);
   writeLocalLikes(local);

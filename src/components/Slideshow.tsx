@@ -15,6 +15,8 @@ const AD_SLOT = process.env.NEXT_PUBLIC_AD_SLOT || "";
 export default function Slideshow() {
   const { data: session } = useSession();
   const isAuthenticated = !!session?.user;
+  const isAuthRef = useRef(isAuthenticated);
+  isAuthRef.current = isAuthenticated;
 
   const [settings, setSettings] = useState<SlideshowSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
@@ -80,11 +82,11 @@ export default function Slideshow() {
       .catch(() => setIsPremium(false));
   }, [isAuthenticated]);
 
-  // Save settings whenever they change
+  // Save settings whenever they change (use ref for auth to avoid saving stale settings on login)
   useEffect(() => {
-    if (hydrated) storage.saveSettings(settings, isAuthenticated);
+    if (hydrated) storage.saveSettings(settings, isAuthRef.current);
     settingsRef.current = settings;
-  }, [settings, hydrated, isAuthenticated]);
+  }, [settings, hydrated]);
 
   const getDuration = useCallback(() => {
     if (!currentItem) return 5;
