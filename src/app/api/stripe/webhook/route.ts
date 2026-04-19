@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET
+      process.env.STRIPE_WEBHOOK_SECRET,
     );
   } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
@@ -37,21 +37,22 @@ export async function POST(request: NextRequest) {
             status: "active",
             updatedAt: new Date(),
           })
-          .where(eq(subscriptions.stripeCustomerId, session.customer as string));
+          .where(
+            eq(subscriptions.stripeCustomerId, session.customer as string),
+          );
       }
       break;
     }
 
     case "invoice.paid": {
-      const invoice = event.data.object as Stripe.Invoice & {
-        subscription?: string | Stripe.Subscription;
+      const invoice = event.data.object as any as Stripe.Invoice;
+      const invoiceData = invoice as Stripe.Invoice & {
+        subscription?: string;
         customer?: string;
       };
-      if (invoice.subscription && invoice.customer) {
+      if (invoiceData.subscription && invoiceData.customer) {
         const sub = await stripe.subscriptions.retrieve(
-          typeof invoice.subscription === "string"
-            ? invoice.subscription
-            : invoice.subscription.id
+          invoiceData.subscription as string,
         );
         await db
           .update(subscriptions)
@@ -61,7 +62,9 @@ export async function POST(request: NextRequest) {
             stripePriceId: sub.items.data[0]?.price?.id ?? null,
             updatedAt: new Date(),
           })
-          .where(eq(subscriptions.stripeCustomerId, invoice.customer as string));
+          .where(
+            eq(subscriptions.stripeCustomerId, invoice.customer as string),
+          );
       }
       break;
     }
