@@ -1,51 +1,21 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession, signIn } from "next-auth/react";
 import { MediaItem, SlideshowSettings, DEFAULT_SETTINGS } from "@/lib/types";
 import { fetchAllMedia, FetchResult } from "@/lib/reddit";
+import * as storage from "@/lib/storage";
 import MediaRenderer from "./MediaRenderer";
 import SettingsPanel from "./SettingsPanel";
+import AdSlide from "./AdSlide";
 
-const STORAGE_KEY = "reddit-slideshow-settings";
-const LIKES_KEY = "reddit-slideshow-likes";
-
-function loadSettings(): SlideshowSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return { ...DEFAULT_SETTINGS, ...parsed };
-    }
-  } catch {}
-  return DEFAULT_SETTINGS;
-}
-
-function saveSettings(settings: SlideshowSettings) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch {}
-}
-
-function loadLikes(): Map<string, MediaItem> {
-  if (typeof window === "undefined") return new Map();
-  try {
-    const stored = localStorage.getItem(LIKES_KEY);
-    if (stored) {
-      const arr: MediaItem[] = JSON.parse(stored);
-      return new Map(arr.map((item) => [item.id, item]));
-    }
-  } catch {}
-  return new Map();
-}
-
-function saveLikes(likes: Map<string, MediaItem>) {
-  try {
-    localStorage.setItem(LIKES_KEY, JSON.stringify([...likes.values()]));
-  } catch {}
-}
+const AD_INTERVAL = 10; // show an ad every N slides
+const AD_SLOT = process.env.NEXT_PUBLIC_AD_SLOT || "";
 
 export default function Slideshow() {
+  const { data: session } = useSession();
+  const isAuthenticated = !!session?.user;
+
   const [settings, setSettings] = useState<SlideshowSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -61,6 +31,9 @@ export default function Slideshow() {
   const [likes, setLikes] = useState<Map<string, MediaItem>>(new Map());
   const [viewingLikes, setViewingLikes] = useState(false);
   const [fetchingMore, setFetchingMore] = useState(false);
+  const [showAd, setShowAd] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
+  const slidesSinceAd = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -77,23 +50,41 @@ export default function Slideshow() {
 
   const currentItem = items[currentIndex] ?? null;
 
-  // Load settings and likes from localStorage on mount
+  // Load settings and likes on mount (from DB if authenticated, localStorage otherwise)
   useEffect(() => {
-    setSettings(loadSettings());
-    setLikes(loadLikes());
-    setHydrated(true);
-  }, []);
+    let cancelled = false;
+    async function init() {
+      const [s, l] = await Promise.all([
+        storage.loadSettings(isAuthenticated),
+        storage.loadLikes(isAuthenticated),
+      ]);
+      if (!cancelled) {
+        setSettings(s);
+        setLikes(l);
+        setHydrated(true);
+      }
+    }
+    init();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
 
-  // Save settings to localStorage whenever they change
+  // Check premium status
   useEffect(() => {
-    if (hydrated) saveSettings(settings);
+    if (!isAuthenticated) {
+      setIsPremium(false);
+      return;
+    }
+    fetch("/api/user/subscription")
+      .then((r) => r.json())
+      .then((data) => setIsPremium(data.subscription?.isPremium ?? false))
+      .catch(() => setIsPremium(false));
+  }, [isAuthenticated]);
+
+  // Save settings whenever they change
+  useEffect(() => {
+    if (hydrated) storage.saveSettings(settings, isAuthenticated);
     settingsRef.current = settings;
-  }, [settings, hydrated]);
-
-  // Save likes whenever they change
-  useEffect(() => {
-    if (hydrated) saveLikes(likes);
-  }, [likes, hydrated]);
+  }, [settings, hydrated, isAuthenticated]);
 
   const getDuration = useCallback(() => {
     if (!currentItem) return 5;
@@ -146,9 +137,19 @@ export default function Slideshow() {
 
   const goNext = useCallback(() => {
     if (items.length === 0) return;
+
+    // Show interstitial ad every N slides (non-premium only)
+    if (!isPremium && !showAd && AD_SLOT) {
+      slidesSinceAd.current++;
+      if (slidesSinceAd.current >= AD_INTERVAL) {
+        slidesSinceAd.current = 0;
+        setShowAd(true);
+        return;
+      }
+    }
+
     setCurrentIndex((i) => {
       const next = (i + 1) % items.length;
-      // Fetch more when 5 items from the end
       if (!viewingLikes && items.length - next <= 5) {
         fetchMore();
       }
@@ -157,7 +158,7 @@ export default function Slideshow() {
     setProgress(0);
     setMediaLoaded(false);
     videoDurationRef.current = null;
-  }, [items.length, viewingLikes, fetchMore]);
+  }, [items.length, viewingLikes, fetchMore, isPremium, showAd]);
 
   const goPrev = useCallback(() => {
     if (items.length === 0) return;
@@ -299,13 +300,15 @@ export default function Slideshow() {
       if (next.has(item.id)) {
         next.delete(item.id);
         showToast("Removed from likes");
+        storage.removeLike(item.id, isAuthenticated);
       } else {
         next.set(item.id, item);
         showToast("Added to likes");
+        storage.addLike(item, isAuthenticated);
       }
       return next;
     });
-  }, [showToast]);
+  }, [showToast, isAuthenticated]);
 
   const loadMedia = async (newSettings: SlideshowSettings) => {
     setIsLoading(true);
@@ -378,8 +381,21 @@ export default function Slideshow() {
 
   return (
     <div className="fixed inset-0 bg-black select-none pointer-events-none">
+      {/* Interstitial ad */}
+      {showAd && AD_SLOT && (
+        <div className="absolute inset-0" style={{ zIndex: 5 }}>
+          <AdSlide
+            adSlot={AD_SLOT}
+            onDone={() => {
+              setShowAd(false);
+              goNext();
+            }}
+          />
+        </div>
+      )}
+
       {/* Main media display */}
-      {currentItem && (
+      {currentItem && !showAd && (
         <div className="absolute inset-0" style={{ zIndex: 0 }}>
           <MediaRenderer
             key={currentItem.id}
@@ -545,6 +561,35 @@ export default function Slideshow() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </button>
+
+            {/* Sign-in / Account button */}
+            {!isAuthenticated ? (
+              <button
+                onClick={() => signIn("google")}
+                className="p-2 sm:p-2.5 text-zinc-400 hover:text-white active:scale-95 transition-all rounded-full hover:bg-white/5"
+                title="Sign in"
+                aria-label="Sign in with Google"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </button>
+            ) : (
+              <a
+                href="/account"
+                className="p-1 sm:p-1.5 rounded-full hover:ring-2 hover:ring-orange-500/50 transition-all"
+                title="Account"
+                aria-label="Account settings"
+              >
+                {session?.user?.image ? (
+                  <img src={session.user.image} alt="" className="w-6 h-6 sm:w-7 sm:h-7 rounded-full" />
+                ) : (
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                )}
+              </a>
+            )}
           </div>
 
         </div>
