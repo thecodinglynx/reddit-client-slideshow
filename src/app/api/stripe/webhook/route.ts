@@ -43,10 +43,15 @@ export async function POST(request: NextRequest) {
     }
 
     case "invoice.paid": {
-      const invoice = event.data.object as Stripe.Invoice;
+      const invoice = event.data.object as Stripe.Invoice & {
+        subscription?: string | Stripe.Subscription;
+        customer?: string;
+      };
       if (invoice.subscription && invoice.customer) {
         const sub = await stripe.subscriptions.retrieve(
-          invoice.subscription as string
+          typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : invoice.subscription.id
         );
         await db
           .update(subscriptions)
