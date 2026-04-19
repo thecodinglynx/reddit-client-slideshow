@@ -10,7 +10,7 @@ import SettingsPanel from "./SettingsPanel";
 import AdSlide from "./AdSlide";
 
 const AD_INTERVAL = 10; // show an ad every N slides
-const AD_SLOT = process.env.NEXT_PUBLIC_AD_SLOT || "";
+const AD_SLOT = "9234556481";
 
 export default function Slideshow() {
   const { data: session } = useSession();

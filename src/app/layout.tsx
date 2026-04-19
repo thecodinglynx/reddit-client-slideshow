@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import AuthProvider from "@/components/providers/AuthProvider";
 import "./globals.css";
 
@@ -27,6 +28,10 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased overflow-hidden">
         <AuthProvider>{children}</AuthProvider>
+        <Script
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3853368383549506"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

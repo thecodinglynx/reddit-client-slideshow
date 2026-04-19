@@ -40,7 +40,7 @@ export default function AdSlide({ adSlot, onDone, duration = 8 }: AdSlideProps) 
         <ins
           className="adsbygoogle"
           style={{ display: "block" }}
-          data-ad-client={process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID}
+          data-ad-client="ca-pub-3853368383549506"
           data-ad-slot={adSlot}
           data-ad-format="auto"
           data-full-width-responsive="true"
