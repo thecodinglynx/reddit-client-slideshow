@@ -19,11 +19,17 @@ export async function POST() {
 
   const sub = rows[0];
   if (!sub?.stripeCustomerId) {
-    return NextResponse.json({ error: "No subscription found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "No subscription found" },
+      { status: 404 },
+    );
   }
 
   if (!stripe) {
-    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Stripe not configured" },
+      { status: 500 },
+    );
   }
 
   const portalSession = await stripe.billingPortal.sessions.create({

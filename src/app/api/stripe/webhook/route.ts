@@ -17,7 +17,10 @@ export async function POST(request: NextRequest) {
 
   let event: Stripe.Event;
   if (!stripe) {
-    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Stripe not configured" },
+      { status: 500 },
+    );
   }
 
   try {
@@ -31,7 +34,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (!stripe) {
-    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Stripe not configured" },
+      { status: 500 },
+    );
   }
 
   switch (event.type) {

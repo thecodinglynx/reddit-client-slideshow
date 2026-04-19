@@ -13,7 +13,10 @@ export async function POST() {
 
   const priceId = process.env.STRIPE_PRICE_ID;
   if (!priceId || !stripe) {
-    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Stripe not configured" },
+      { status: 500 },
+    );
   }
 
   // Check for existing Stripe customer
