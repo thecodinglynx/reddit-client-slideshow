@@ -23,15 +23,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <Script
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3853368383549506"
-          strategy="beforeInteractive"
-          crossOrigin="anonymous"
-        />
-      </head>
       <body className="antialiased overflow-hidden">
         <AuthProvider>{children}</AuthProvider>
+        <Script
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3853368383549506"
+          strategy="afterInteractive"
+          crossOrigin="anonymous"
+        />
       </body>
     </html>
   );
