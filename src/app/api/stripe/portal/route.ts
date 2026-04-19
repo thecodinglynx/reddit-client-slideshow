@@ -22,6 +22,10 @@ export async function POST() {
     return NextResponse.json({ error: "No subscription found" }, { status: 404 });
   }
 
+  if (!stripe) {
+    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+  }
+
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: sub.stripeCustomerId,
     return_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account`,

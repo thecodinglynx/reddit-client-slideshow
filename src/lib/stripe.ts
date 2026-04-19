@@ -1,5 +1,9 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-03-25.dahlia",
-});
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
+export const stripe = stripeSecretKey
+  ? new Stripe(stripeSecretKey, {
+      apiVersion: "2026-03-25.dahlia",
+    })
+  : null;

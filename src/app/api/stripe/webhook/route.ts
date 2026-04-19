@@ -16,6 +16,10 @@ export async function POST(request: NextRequest) {
   }
 
   let event: Stripe.Event;
+  if (!stripe) {
+    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+  }
+
   try {
     event = stripe.webhooks.constructEvent(
       body,
@@ -24,6 +28,10 @@ export async function POST(request: NextRequest) {
     );
   } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  if (!stripe) {
+    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
   }
 
   switch (event.type) {
@@ -51,9 +59,9 @@ export async function POST(request: NextRequest) {
         customer?: string;
       };
       if (invoiceData.subscription && invoiceData.customer) {
-        const sub = await stripe.subscriptions.retrieve(
+        const sub = (await stripe.subscriptions.retrieve(
           invoiceData.subscription as string,
-        );
+        )) as unknown as Stripe.Subscription & { current_period_end: number };
         await db
           .update(subscriptions)
           .set({
@@ -70,7 +78,9 @@ export async function POST(request: NextRequest) {
     }
 
     case "customer.subscription.updated": {
-      const sub = event.data.object as Stripe.Subscription;
+      const sub = event.data.object as unknown as Stripe.Subscription & {
+        current_period_end: number;
+      };
       await db
         .update(subscriptions)
         .set({
