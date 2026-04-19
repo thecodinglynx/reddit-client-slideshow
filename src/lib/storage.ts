@@ -47,16 +47,25 @@ export async function loadSettings(
   isAuthenticated: boolean
 ): Promise<SlideshowSettings> {
   if (isAuthenticated) {
+    console.log("Loading settings from database (authenticated user)");
     try {
       const res = await fetch("/api/user/settings");
+      console.log("Settings API response status:", res.status);
+
       const data = await res.json();
+      console.log("Settings API response data:", data);
+
       if (data.settings) {
         const settings = { ...DEFAULT_SETTINGS, ...data.settings };
         writeLocalSettings(settings); // keep local cache in sync
+        console.log("Loaded settings from DB:", settings);
         return settings;
       }
-    } catch { /* fall through to localStorage */ }
+    } catch (error) {
+      console.error("Failed to load settings from database:", error);
+    }
   }
+  console.log("Falling back to localStorage settings");
   return readLocalSettings();
 }
 
@@ -64,15 +73,29 @@ export async function saveSettings(
   settings: SlideshowSettings,
   isAuthenticated: boolean
 ): Promise<void> {
+  console.log("Saving settings, authenticated:", isAuthenticated);
   writeLocalSettings(settings); // always cache locally
   if (isAuthenticated) {
+    console.log("Attempting to save settings to database");
     try {
-      await fetch("/api/user/settings", {
+      const res = await fetch("/api/user/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings }),
       });
-    } catch { /* silent fail, localStorage is the fallback */ }
+      console.log("Save settings API response status:", res.status);
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Failed to save settings to database:", errorData);
+      } else {
+        console.log("Settings saved to database successfully");
+      }
+    } catch (error) {
+      console.error("Error saving settings to database:", error);
+    }
+  } else {
+    console.log("Not authenticated, settings saved to localStorage only");
   }
 }
 
