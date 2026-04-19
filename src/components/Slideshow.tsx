@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
-import { MediaItem, SlideshowSettings, DEFAULT_SETTINGS } from "@/lib/types";
+import { MediaItem, SlideshowSettings, DEFAULT_SETTINGS, ContentProgress } from "@/lib/types";
 import { fetchAllMedia, FetchResult } from "@/lib/reddit";
 import * as storage from "@/lib/storage";
 import MediaRenderer from "./MediaRenderer";
@@ -49,6 +49,7 @@ export default function Slideshow() {
   const afterTokensRef = useRef<Record<string, string | null>>({});
   const seenIdsRef = useRef<Set<string>>(new Set());
   const settingsRef = useRef<SlideshowSettings>(DEFAULT_SETTINGS);
+  const savedProgressRef = useRef<ContentProgress | null>(null);
 
   const currentItem = items[currentIndex] ?? null;
 
@@ -56,13 +57,15 @@ export default function Slideshow() {
   useEffect(() => {
     let cancelled = false;
     async function init() {
-      const [s, l] = await Promise.all([
+      const [s, l, p] = await Promise.all([
         storage.loadSettings(isAuthenticated),
         storage.loadLikes(isAuthenticated),
+        storage.loadProgress(isAuthenticated),
       ]);
       if (!cancelled) {
         setSettings(s);
         setLikes(l);
+        savedProgressRef.current = p;
         setHydrated(true);
       }
     }
@@ -129,6 +132,10 @@ export default function Slideshow() {
           seenIdsRef.current.add(item.id);
         }
         setItems((prev) => [...prev, ...result.items]);
+      }
+      if (isAuthRef.current) {
+        const hash = storage.computeSettingsHash(s);
+        storage.saveProgress(hash, result.afterTokens, true);
       }
     } catch {
       // Silently fail — user can still view existing items
@@ -334,8 +341,13 @@ export default function Slideshow() {
         return;
       }
 
-      // Reset pagination state
-      afterTokensRef.current = {};
+      // Resume from saved progress if settings match, otherwise start fresh
+      const hash = storage.computeSettingsHash(newSettings);
+      const progress = savedProgressRef.current;
+      const resumeTokens =
+        progress && progress.settingsHash === hash ? progress.afterTokens : {};
+
+      afterTokensRef.current = resumeTokens;
       seenIdsRef.current = new Set();
 
       const result = await fetchAllMedia(
@@ -344,7 +356,8 @@ export default function Slideshow() {
         newSettings.users,
         newSettings.sortOrder,
         newSettings.topTimeframe,
-        newSettings.showNsfw
+        newSettings.showNsfw,
+        resumeTokens
       );
       if (result.items.length === 0) {
         setError("No media found. Try different sources.");
@@ -355,6 +368,10 @@ export default function Slideshow() {
       afterTokensRef.current = result.afterTokens;
       for (const item of result.items) {
         seenIdsRef.current.add(item.id);
+      }
+
+      if (isAuthRef.current) {
+        storage.saveProgress(hash, result.afterTokens, true);
       }
 
       setItems(result.items);

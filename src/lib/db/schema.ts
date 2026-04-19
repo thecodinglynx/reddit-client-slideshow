@@ -89,6 +89,17 @@ export const userLikes = pgTable(
   (table) => [uniqueIndex("user_likes_user_post").on(table.userId, table.postId)]
 );
 
+export const userContentProgress = pgTable("user_content_progress", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  settingsHash: text("settings_hash").notNull(),
+  afterTokens: jsonb("after_tokens").notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export const subscriptions = pgTable("subscriptions", {
   id: text("id")
     .primaryKey()

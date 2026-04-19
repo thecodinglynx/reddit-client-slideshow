@@ -111,3 +111,8 @@ export const DEFAULT_SETTINGS: SlideshowSettings = {
   showNsfw: false,
   autoPlay: true,
 };
+
+export interface ContentProgress {
+  settingsHash: string;
+  afterTokens: Record<string, string | null>;
+}

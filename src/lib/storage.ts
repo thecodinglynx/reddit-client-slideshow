@@ -1,4 +1,4 @@
-import { SlideshowSettings, DEFAULT_SETTINGS, MediaItem } from "./types";
+import { SlideshowSettings, DEFAULT_SETTINGS, MediaItem, ContentProgress } from "./types";
 
 const SETTINGS_KEY = "reddit-slideshow-settings";
 const LIKES_KEY = "reddit-slideshow-likes";
@@ -136,4 +136,48 @@ export async function removeLike(
       });
     } catch { /* silent fail */ }
   }
+}
+
+export function computeSettingsHash(s: SlideshowSettings): string {
+  const key = JSON.stringify({
+    m: s.sourceMode,
+    r: [...s.subreddits].sort(),
+    u: [...s.users].sort(),
+    s: s.sortOrder,
+    t: s.topTimeframe,
+    n: s.showNsfw,
+  });
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+  }
+  return hash.toString(36);
+}
+
+export async function loadProgress(
+  isAuthenticated: boolean
+): Promise<ContentProgress | null> {
+  if (!isAuthenticated) return null;
+  try {
+    const res = await fetch("/api/user/progress");
+    const data = await res.json();
+    return data.progress ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveProgress(
+  settingsHash: string,
+  afterTokens: Record<string, string | null>,
+  isAuthenticated: boolean
+): Promise<void> {
+  if (!isAuthenticated) return;
+  try {
+    await fetch("/api/user/progress", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settingsHash, afterTokens }),
+    });
+  } catch { /* silent fail */ }
 }
