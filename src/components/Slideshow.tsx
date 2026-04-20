@@ -8,6 +8,7 @@ import * as storage from "@/lib/storage";
 import MediaRenderer from "./MediaRenderer";
 import SettingsPanel from "./SettingsPanel";
 import AdSlide from "./AdSlide";
+import CommentsPanel from "./CommentsPanel";
 
 const AD_INTERVAL = 10; // show an ad every N slides
 const AD_SLOT = "9234556481";
@@ -35,6 +36,7 @@ export default function Slideshow() {
   const [fetchingMore, setFetchingMore] = useState(false);
   const [showAd, setShowAd] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const slidesSinceAd = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -181,6 +183,7 @@ export default function Slideshow() {
     });
     setProgress(0);
     setMediaLoaded(false);
+    setShowComments(false);
     videoDurationRef.current = null;
   }, [items.length, viewingLikes, fetchMore, isPremium, showAd]);
 
@@ -189,6 +192,7 @@ export default function Slideshow() {
     setCurrentIndex((i) => (i - 1 + items.length) % items.length);
     setProgress(0);
     setMediaLoaded(false);
+    setShowComments(false);
     videoDurationRef.current = null;
   }, [items.length, showAd]);
 
@@ -238,7 +242,11 @@ export default function Slideshow() {
         case "l":
           if (currentItem) toggleLike(currentItem);
           break;
+        case "c":
+          if (currentItem) setShowComments((s) => !s);
+          break;
         case "Escape":
+          if (showComments) { setShowComments(false); break; }
           setShowSettings((s) => !s);
           break;
       }
@@ -246,7 +254,7 @@ export default function Slideshow() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goNext, goPrev, showSettings, currentItem]);
+  }, [goNext, goPrev, showSettings, showComments, currentItem]);
 
   // Mouse/touch shows overlay
   useEffect(() => {
@@ -523,6 +531,18 @@ export default function Slideshow() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
+                  onClick={() => setShowComments((s) => !s)}
+                  className={`p-1.5 sm:p-2 rounded-full transition-all active:scale-90 ${
+                    showComments ? "text-orange-400" : "text-zinc-500 hover:text-orange-400"
+                  }`}
+                  title="Comments (C)"
+                  aria-label="Toggle comments"
+                >
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </button>
+                <button
                   onClick={() => toggleLike(currentItem)}
                   className={`p-1.5 sm:p-2 rounded-full transition-all active:scale-90 ${
                     isLiked
@@ -648,6 +668,14 @@ export default function Slideshow() {
 
         </div>
       </div>
+
+      {/* Comments panel */}
+      {showComments && currentItem && (
+        <CommentsPanel
+          permalink={currentItem.permalink}
+          onClose={() => setShowComments(false)}
+        />
+      )}
 
       {/* Settings modal */}
       {showSettings && (

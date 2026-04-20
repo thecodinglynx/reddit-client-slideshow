@@ -48,6 +48,19 @@ input[type="range"] {
   animation: toast-in 0.2s ease-out;
 }
 
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
 /* Swipe area for touch devices */
 @media (hover: none) and (pointer: coarse) {
   .touch-nav-area {
