@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
-import { MediaItem, SlideshowSettings, DEFAULT_SETTINGS, ContentProgress } from "@/lib/types";
+import { MediaItem, SlideshowSettings, DEFAULT_SETTINGS } from "@/lib/types";
 import { fetchAllMedia, FetchResult } from "@/lib/reddit";
 import * as storage from "@/lib/storage";
 import MediaRenderer from "./MediaRenderer";
@@ -49,7 +49,6 @@ export default function Slideshow() {
   const afterTokensRef = useRef<Record<string, string | null>>({});
   const seenIdsRef = useRef<Set<string>>(new Set());
   const settingsRef = useRef<SlideshowSettings>(DEFAULT_SETTINGS);
-  const savedProgressRef = useRef<ContentProgress | null>(null);
   const progressSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const itemsRef = useRef<MediaItem[]>([]);
 
@@ -59,15 +58,13 @@ export default function Slideshow() {
   useEffect(() => {
     let cancelled = false;
     async function init() {
-      const [s, l, p] = await Promise.all([
+      const [s, l] = await Promise.all([
         storage.loadSettings(isAuthenticated),
         storage.loadLikes(isAuthenticated),
-        storage.loadProgress(isAuthenticated),
       ]);
       if (!cancelled) {
         setSettings(s);
         setLikes(l);
-        savedProgressRef.current = p;
         setHydrated(true);
       }
     }
@@ -160,7 +157,7 @@ export default function Slideshow() {
   }, [fetchingMore, viewingLikes]);
 
   const goNext = useCallback(() => {
-    if (items.length === 0) return;
+    if (items.length === 0 || showAd) return;
 
     // Show interstitial ad every N slides (non-premium only)
     if (!isPremium && !showAd && AD_SLOT) {
@@ -186,7 +183,7 @@ export default function Slideshow() {
   }, [items.length, viewingLikes, fetchMore, isPremium, showAd]);
 
   const goPrev = useCallback(() => {
-    if (items.length === 0) return;
+    if (items.length === 0 || showAd) return;
     setCurrentIndex((i) => (i - 1 + items.length) % items.length);
     setProgress(0);
     setMediaLoaded(false);
@@ -358,10 +355,12 @@ export default function Slideshow() {
       }
 
       const hash = storage.computeSettingsHash(newSettings);
-      const progress = savedProgressRef.current;
+      const progress = isAuthRef.current
+        ? await storage.loadProgress(hash, true)
+        : null;
 
-      // Restore from saved progress if settings match and items exist
-      if (progress && progress.settingsHash === hash && progress.items.length > 0) {
+      // Restore from saved progress if found
+      if (progress && progress.items.length > 0) {
         afterTokensRef.current = progress.afterTokens;
         seenIdsRef.current = new Set(progress.items.map((item) => item.id));
         itemsRef.current = progress.items;

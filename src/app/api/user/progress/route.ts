@@ -2,19 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { userContentProgress } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const hash = request.nextUrl.searchParams.get("hash");
+  if (!hash) {
+    return NextResponse.json({ error: "Missing hash" }, { status: 400 });
   }
 
   try {
     const row = await db
       .select()
       .from(userContentProgress)
-      .where(eq(userContentProgress.userId, session.user.id))
+      .where(
+        and(
+          eq(userContentProgress.userId, session.user.id),
+          eq(userContentProgress.settingsHash, hash)
+        )
+      )
       .limit(1);
 
     return NextResponse.json({ progress: row[0] ?? null });
@@ -49,9 +59,8 @@ export async function PUT(request: NextRequest) {
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: userContentProgress.userId,
+        target: [userContentProgress.userId, userContentProgress.settingsHash],
         set: {
-          settingsHash,
           afterTokens,
           items,
           currentIndex: currentIndex ?? 0,

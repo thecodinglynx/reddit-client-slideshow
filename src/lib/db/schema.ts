@@ -89,18 +89,22 @@ export const userLikes = pgTable(
   (table) => [uniqueIndex("user_likes_user_post").on(table.userId, table.postId)]
 );
 
-export const userContentProgress = pgTable("user_content_progress", {
-  userId: text("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  settingsHash: text("settings_hash").notNull(),
-  afterTokens: jsonb("after_tokens").notNull(),
-  items: jsonb("items").notNull(),
-  currentIndex: integer("current_index").notNull().default(0),
-  updatedAt: timestamp("updated_at", { mode: "date" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const userContentProgress = pgTable(
+  "user_content_progress",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    settingsHash: text("settings_hash").notNull(),
+    afterTokens: jsonb("after_tokens").notNull(),
+    items: jsonb("items").notNull(),
+    currentIndex: integer("current_index").notNull().default(0),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.settingsHash] })]
+);
 
 export const subscriptions = pgTable("subscriptions", {
   id: text("id")

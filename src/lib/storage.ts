@@ -155,11 +155,12 @@ export function computeSettingsHash(s: SlideshowSettings): string {
 }
 
 export async function loadProgress(
+  settingsHash: string,
   isAuthenticated: boolean
 ): Promise<ContentProgress | null> {
   if (!isAuthenticated) return null;
   try {
-    const res = await fetch("/api/user/progress");
+    const res = await fetch(`/api/user/progress?hash=${encodeURIComponent(settingsHash)}`);
     const data = await res.json();
     return data.progress ?? null;
   } catch {
