@@ -43,11 +43,11 @@ export async function POST(request: NextRequest) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
-      if (session.subscription && session.customer) {
+      if (session.customer) {
         await db
           .update(subscriptions)
           .set({
-            stripeSubscriptionId: session.subscription as string,
+            stripeSubscriptionId: (session.subscription as string) ?? null,
             status: "active",
             updatedAt: new Date(),
           })

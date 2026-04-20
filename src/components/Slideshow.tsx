@@ -188,7 +188,7 @@ export default function Slideshow() {
     setProgress(0);
     setMediaLoaded(false);
     videoDurationRef.current = null;
-  }, [items.length]);
+  }, [items.length, showAd]);
 
   // Auto-advance timer — only starts after media has loaded
   useEffect(() => {
