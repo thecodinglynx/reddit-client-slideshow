@@ -95,6 +95,8 @@ export const userContentProgress = pgTable("user_content_progress", {
     .references(() => users.id, { onDelete: "cascade" }),
   settingsHash: text("settings_hash").notNull(),
   afterTokens: jsonb("after_tokens").notNull(),
+  items: jsonb("items").notNull(),
+  currentIndex: integer("current_index").notNull().default(0),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),

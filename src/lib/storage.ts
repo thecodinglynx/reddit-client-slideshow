@@ -170,6 +170,8 @@ export async function loadProgress(
 export async function saveProgress(
   settingsHash: string,
   afterTokens: Record<string, string | null>,
+  items: MediaItem[],
+  currentIndex: number,
   isAuthenticated: boolean
 ): Promise<void> {
   if (!isAuthenticated) return;
@@ -177,7 +179,7 @@ export async function saveProgress(
     await fetch("/api/user/progress", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ settingsHash, afterTokens }),
+      body: JSON.stringify({ settingsHash, afterTokens, items, currentIndex }),
     });
   } catch { /* silent fail */ }
 }

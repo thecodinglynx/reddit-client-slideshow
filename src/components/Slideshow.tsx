@@ -50,6 +50,8 @@ export default function Slideshow() {
   const seenIdsRef = useRef<Set<string>>(new Set());
   const settingsRef = useRef<SlideshowSettings>(DEFAULT_SETTINGS);
   const savedProgressRef = useRef<ContentProgress | null>(null);
+  const progressSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const itemsRef = useRef<MediaItem[]>([]);
 
   const currentItem = items[currentIndex] ?? null;
 
@@ -91,6 +93,15 @@ export default function Slideshow() {
     settingsRef.current = settings;
   }, [settings, hydrated]);
 
+  const debouncedSaveIndex = useCallback((index: number) => {
+    if (!isAuthRef.current) return;
+    if (progressSaveTimer.current) clearTimeout(progressSaveTimer.current);
+    progressSaveTimer.current = setTimeout(() => {
+      const hash = storage.computeSettingsHash(settingsRef.current);
+      storage.saveProgress(hash, afterTokensRef.current, itemsRef.current, index, true);
+    }, 5000);
+  }, []);
+
   const getDuration = useCallback(() => {
     if (!currentItem) return 5;
     switch (currentItem.type) {
@@ -131,11 +142,15 @@ export default function Slideshow() {
         for (const item of result.items) {
           seenIdsRef.current.add(item.id);
         }
-        setItems((prev) => [...prev, ...result.items]);
-      }
-      if (isAuthRef.current) {
-        const hash = storage.computeSettingsHash(s);
-        storage.saveProgress(hash, result.afterTokens, true);
+        setItems((prev) => {
+          const updated = [...prev, ...result.items];
+          itemsRef.current = updated;
+          if (isAuthRef.current) {
+            const hash = storage.computeSettingsHash(s);
+            storage.saveProgress(hash, result.afterTokens, updated, 0, true);
+          }
+          return updated;
+        });
       }
     } catch {
       // Silently fail — user can still view existing items
@@ -162,6 +177,7 @@ export default function Slideshow() {
       if (!viewingLikes && items.length - next <= 5) {
         fetchMore();
       }
+      debouncedSaveIndex(next);
       return next;
     });
     setProgress(0);
@@ -341,13 +357,26 @@ export default function Slideshow() {
         return;
       }
 
-      // Resume from saved progress if settings match, otherwise start fresh
       const hash = storage.computeSettingsHash(newSettings);
       const progress = savedProgressRef.current;
-      const resumeTokens =
-        progress && progress.settingsHash === hash ? progress.afterTokens : {};
 
-      afterTokensRef.current = resumeTokens;
+      // Restore from saved progress if settings match and items exist
+      if (progress && progress.settingsHash === hash && progress.items.length > 0) {
+        afterTokensRef.current = progress.afterTokens;
+        seenIdsRef.current = new Set(progress.items.map((item) => item.id));
+        itemsRef.current = progress.items;
+        setItems(progress.items);
+        setCurrentIndex(progress.currentIndex);
+        setProgress(0);
+        setMediaLoaded(false);
+        setSettings(newSettings);
+        setShowSettings(false);
+        setIsPlaying(true);
+        return;
+      }
+
+      // Fresh fetch
+      afterTokensRef.current = {};
       seenIdsRef.current = new Set();
 
       const result = await fetchAllMedia(
@@ -356,22 +385,21 @@ export default function Slideshow() {
         newSettings.users,
         newSettings.sortOrder,
         newSettings.topTimeframe,
-        newSettings.showNsfw,
-        resumeTokens
+        newSettings.showNsfw
       );
       if (result.items.length === 0) {
         setError("No media found. Try different sources.");
         return;
       }
 
-      // Track pagination tokens and seen IDs
       afterTokensRef.current = result.afterTokens;
       for (const item of result.items) {
         seenIdsRef.current.add(item.id);
       }
+      itemsRef.current = result.items;
 
       if (isAuthRef.current) {
-        storage.saveProgress(hash, result.afterTokens, true);
+        storage.saveProgress(hash, result.afterTokens, result.items, 0, true);
       }
 
       setItems(result.items);

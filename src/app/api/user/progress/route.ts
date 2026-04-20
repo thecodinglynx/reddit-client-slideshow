@@ -31,9 +31,9 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { settingsHash, afterTokens } = body;
+  const { settingsHash, afterTokens, items, currentIndex } = body;
 
-  if (!settingsHash || !afterTokens) {
+  if (!settingsHash || !afterTokens || !items) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
@@ -44,11 +44,19 @@ export async function PUT(request: NextRequest) {
         userId: session.user.id,
         settingsHash,
         afterTokens,
+        items,
+        currentIndex: currentIndex ?? 0,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
         target: userContentProgress.userId,
-        set: { settingsHash, afterTokens, updatedAt: new Date() },
+        set: {
+          settingsHash,
+          afterTokens,
+          items,
+          currentIndex: currentIndex ?? 0,
+          updatedAt: new Date(),
+        },
       });
 
     return NextResponse.json({ ok: true });

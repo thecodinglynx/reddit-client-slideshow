@@ -115,4 +115,6 @@ export const DEFAULT_SETTINGS: SlideshowSettings = {
 export interface ContentProgress {
   settingsHash: string;
   afterTokens: Record<string, string | null>;
+  items: MediaItem[];
+  currentIndex: number;
 }
