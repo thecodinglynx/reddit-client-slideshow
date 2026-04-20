@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("q");
   const limit = request.nextUrl.searchParams.get("limit") || "8";
+  const nsfw = request.nextUrl.searchParams.get("nsfw") === "1";
 
   if (!query || query.trim().length === 0) {
     return NextResponse.json({ results: [] });
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
     q: query.trim(),
     limit,
     raw_json: "1",
+    ...(nsfw && { include_over_18: "on" }),
   });
 
   const controller = new AbortController();

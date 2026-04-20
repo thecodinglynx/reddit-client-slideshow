@@ -96,7 +96,7 @@ export default function SettingsPanel({
     }
     setSuggestionsLoading(true);
     try {
-      const res = await fetch(`/api/reddit/search?q=${encodeURIComponent(query)}&limit=10`);
+      const res = await fetch(`/api/reddit/search?q=${encodeURIComponent(query)}&limit=10&nsfw=${draft.showNsfw ? "1" : "0"}`);
       const data = await res.json();
       const results = data.results as SubredditSuggestion[];
 

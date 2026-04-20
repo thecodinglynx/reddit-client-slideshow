@@ -279,8 +279,12 @@ export default function Slideshow() {
       const dy = e.changedTouches[0].clientY - touchStartY.current;
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
-      if (absDx > 50 && absDx > absDy * 1.5) {
-        if (dx < 0) goNext();
+      const minSwipe = 50;
+      if (absDx > absDy && absDx > minSwipe) {
+        if (dx < 0) goPrev();
+        else goNext();
+      } else if (absDy > absDx && absDy > minSwipe) {
+        if (dy < 0) goNext();
         else goPrev();
       }
       touchStartX.current = null;
