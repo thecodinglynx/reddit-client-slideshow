@@ -11,6 +11,7 @@ interface SubscriptionInfo {
 export default function AccountPage() {
   const { data: session, status } = useSession();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [subLoaded, setSubLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -18,7 +19,8 @@ export default function AccountPage() {
       fetch("/api/user/subscription")
         .then((r) => r.json())
         .then((data) => setSubscription(data.subscription))
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => setSubLoaded(true));
     }
   }, [session]);
 
@@ -59,18 +61,6 @@ export default function AccountPage() {
     }
   };
 
-  const handleManage = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/stripe/portal", { method: "POST" });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-    } catch {
-      alert("Failed to open billing portal. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-black text-zinc-300 p-6 sm:p-12">
@@ -101,44 +91,37 @@ export default function AccountPage() {
 
         {/* Subscription */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-400 text-sm uppercase tracking-wider">
-              Plan
-            </span>
-            <span
-              className={`text-sm font-medium px-2.5 py-1 rounded-full ${
-                isPremium
-                  ? "bg-orange-600/20 text-orange-400"
-                  : "bg-zinc-800 text-zinc-400"
-              }`}
-            >
-              {isPremium ? "Premium" : "Free"}
-            </span>
-          </div>
-
-          {isPremium && subscription?.currentPeriodEnd && (
-            <p className="text-zinc-500 text-sm">
-              Renews{" "}
-              {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-            </p>
-          )}
-
-          {isPremium ? (
-            <button
-              onClick={handleManage}
-              disabled={loading}
-              className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              Manage subscription
-            </button>
+          {!subLoaded ? (
+            <div className="flex justify-center py-2">
+              <div className="w-5 h-5 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+            </div>
           ) : (
-            <button
-              onClick={handleUpgrade}
-              disabled={loading}
-              className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-sm font-medium transition-colors shadow-lg shadow-orange-600/20 disabled:opacity-50"
-            >
-              {loading ? "Loading..." : "Upgrade to Premium — ad-free"}
-            </button>
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400 text-sm uppercase tracking-wider">
+                  Plan
+                </span>
+                <span
+                  className={`text-sm font-medium px-2.5 py-1 rounded-full ${
+                    isPremium
+                      ? "bg-orange-600/20 text-orange-400"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {isPremium ? "Premium" : "Free"}
+                </span>
+              </div>
+
+              {!isPremium && (
+                <button
+                  onClick={handleUpgrade}
+                  disabled={loading}
+                  className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-sm font-medium transition-colors shadow-lg shadow-orange-600/20 disabled:opacity-50"
+                >
+                  {loading ? "Loading..." : "Upgrade to Premium — ad-free"}
+                </button>
+              )}
+            </>
           )}
         </div>
 

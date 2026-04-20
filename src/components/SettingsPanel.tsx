@@ -43,7 +43,7 @@ function AccountSection() {
 
   return (
     <div className="flex items-center justify-between py-2 px-1">
-      <div className="flex items-center gap-2 min-w-0">
+      <a href="/account" className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
         {session.user?.image && (
           <img
             src={session.user.image}
@@ -54,7 +54,7 @@ function AccountSection() {
         <span className="text-sm text-zinc-300 truncate">
           {session.user?.name || session.user?.email}
         </span>
-      </div>
+      </a>
       <button
         onClick={() => signOut()}
         className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 ml-2"
@@ -254,8 +254,8 @@ export default function SettingsPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-auto">
-      <div className="bg-zinc-900 border border-zinc-800 sm:border-zinc-700 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg sm:mx-4 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
-        <div className="p-5 sm:p-6 space-y-5 sm:space-y-6">
+      <div className="bg-zinc-900 border border-zinc-800 sm:border-zinc-700 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg sm:mx-4 max-h-[85vh] sm:max-h-[90vh] flex flex-col">
+        <div className="p-5 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto flex-1 min-h-0">
           {/* Header */}
           <div className="flex items-center justify-between">
             <h2 className="text-lg sm:text-xl font-semibold text-white">Settings</h2>
@@ -586,29 +586,28 @@ export default function SettingsPanel({
             </button>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex gap-3 pt-1">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-3 sm:py-2.5 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded-xl text-sm font-medium transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => onSave(draft)}
-              disabled={!hasValidSource || isLoading}
-              className="flex-1 px-4 py-3 sm:py-2.5 bg-orange-600 hover:bg-orange-500 active:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-orange-600/20 disabled:shadow-none"
-            >
-              {isLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Loading...
-                </span>
-              ) : (
-                "Apply & Start"
-              )}
-            </button>
-          </div>
+        </div>
+        <div className="flex gap-3 p-5 sm:p-6 pt-3 sm:pt-3 border-t border-zinc-800 shrink-0">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-3 sm:py-2.5 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded-xl text-sm font-medium transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(draft)}
+            disabled={!hasValidSource || isLoading}
+            className="flex-1 px-4 py-3 sm:py-2.5 bg-orange-600 hover:bg-orange-500 active:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-orange-600/20 disabled:shadow-none"
+          >
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Loading...
+              </span>
+            ) : (
+              "Apply & Start"
+            )}
+          </button>
         </div>
       </div>
     </div>
