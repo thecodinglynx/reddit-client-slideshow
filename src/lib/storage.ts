@@ -139,10 +139,12 @@ export async function removeLike(
 }
 
 export function computeSettingsHash(s: SlideshowSettings): string {
+  const activeSubs = s.subreddits.filter((r) => !(s.disabledSubreddits ?? []).includes(r));
+  const activeUsers = s.users.filter((u) => !(s.disabledUsers ?? []).includes(u));
   const key = JSON.stringify({
     m: s.sourceMode,
-    r: [...s.subreddits].sort(),
-    u: [...s.users].sort(),
+    r: [...activeSubs].sort(),
+    u: [...activeUsers].sort(),
     s: s.sortOrder,
     t: s.topTimeframe,
     n: s.showNsfw,

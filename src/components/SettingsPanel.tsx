@@ -210,6 +210,7 @@ export default function SettingsPanel({
     setDraft({
       ...draft,
       subreddits: draft.subreddits.filter((s) => s !== sub),
+      disabledSubreddits: (draft.disabledSubreddits ?? []).filter((s) => s !== sub),
     });
   };
 
@@ -225,6 +226,7 @@ export default function SettingsPanel({
     setDraft({
       ...draft,
       users: draft.users.filter((u) => u !== user),
+      disabledUsers: (draft.disabledUsers ?? []).filter((u) => u !== user),
     });
   };
 
@@ -245,12 +247,14 @@ export default function SettingsPanel({
     return String(count);
   };
 
+  const activeSubs = draft.subreddits.filter((r) => !(draft.disabledSubreddits ?? []).includes(r));
+  const activeUsers = draft.users.filter((u) => !(draft.disabledUsers ?? []).includes(u));
   const hasValidSource =
     draft.sourceMode === "liked"
       ? likedCount > 0
       : draft.sourceMode === "subreddits"
-        ? draft.subreddits.length > 0
-        : draft.users.length > 0;
+        ? activeSubs.length > 0
+        : activeUsers.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-auto">
@@ -341,21 +345,39 @@ export default function SettingsPanel({
 
               {/* Current subreddits */}
               <div className="flex flex-wrap gap-2 mb-3">
-                {draft.subreddits.map((sub) => (
-                  <span
-                    key={sub}
-                    className="inline-flex items-center gap-1.5 bg-zinc-800/80 text-zinc-200 px-3 py-1.5 rounded-full text-xs sm:text-sm border border-zinc-700/50"
-                  >
-                    r/{sub}
-                    <button
-                      onClick={() => removeSubreddit(sub)}
-                      className="text-zinc-500 hover:text-red-400 active:text-red-300 ml-0.5 transition-colors"
-                      aria-label={`Remove r/${sub}`}
+                {draft.subreddits.map((sub) => {
+                  const disabled = (draft.disabledSubreddits ?? []).includes(sub);
+                  return (
+                    <span
+                      key={sub}
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          disabledSubreddits: disabled
+                            ? (d.disabledSubreddits ?? []).filter((r) => r !== sub)
+                            : [...(d.disabledSubreddits ?? []), sub],
+                        }))
+                      }
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm border cursor-pointer transition-all ${
+                        disabled
+                          ? "bg-zinc-900/50 text-zinc-600 border-zinc-800/50"
+                          : "bg-zinc-800/80 text-zinc-200 border-zinc-700/50"
+                      }`}
                     >
-                      &times;
-                    </button>
-                  </span>
-                ))}
+                      <span className={disabled ? "line-through" : ""}>r/{sub}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeSubreddit(sub);
+                        }}
+                        className="text-zinc-500 hover:text-red-400 active:text-red-300 ml-0.5 transition-colors"
+                        aria-label={`Remove r/${sub}`}
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  );
+                })}
                 {draft.subreddits.length === 0 && (
                   <p className="text-zinc-600 text-sm">
                     Add at least one subreddit
@@ -424,21 +446,39 @@ export default function SettingsPanel({
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {draft.users.map((user) => (
-                  <span
-                    key={user}
-                    className="inline-flex items-center gap-1.5 bg-zinc-800/80 text-zinc-200 px-3 py-1.5 rounded-full text-xs sm:text-sm border border-zinc-700/50"
-                  >
-                    u/{user}
-                    <button
-                      onClick={() => removeUser(user)}
-                      className="text-zinc-500 hover:text-red-400 active:text-red-300 ml-0.5 transition-colors"
-                      aria-label={`Remove u/${user}`}
+                {draft.users.map((user) => {
+                  const disabled = (draft.disabledUsers ?? []).includes(user);
+                  return (
+                    <span
+                      key={user}
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          disabledUsers: disabled
+                            ? (d.disabledUsers ?? []).filter((u) => u !== user)
+                            : [...(d.disabledUsers ?? []), user],
+                        }))
+                      }
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm border cursor-pointer transition-all ${
+                        disabled
+                          ? "bg-zinc-900/50 text-zinc-600 border-zinc-800/50"
+                          : "bg-zinc-800/80 text-zinc-200 border-zinc-700/50"
+                      }`}
                     >
-                      &times;
-                    </button>
-                  </span>
-                ))}
+                      <span className={disabled ? "line-through" : ""}>u/{user}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeUser(user);
+                        }}
+                        className="text-zinc-500 hover:text-red-400 active:text-red-300 ml-0.5 transition-colors"
+                        aria-label={`Remove u/${user}`}
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  );
+                })}
                 {draft.users.length === 0 && (
                   <p className="text-zinc-600 text-sm">
                     Add at least one user

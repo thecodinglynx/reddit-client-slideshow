@@ -124,10 +124,12 @@ export default function Slideshow() {
 
     setFetchingMore(true);
     try {
+      const activeSubs = s.subreddits.filter((r) => !(s.disabledSubreddits ?? []).includes(r));
+      const activeUsers = s.users.filter((u) => !(s.disabledUsers ?? []).includes(u));
       const result: FetchResult = await fetchAllMedia(
         s.sourceMode,
-        s.subreddits,
-        s.users,
+        activeSubs,
+        activeUsers,
         s.sortOrder,
         s.topTimeframe,
         s.showNsfw,
@@ -378,10 +380,12 @@ export default function Slideshow() {
       afterTokensRef.current = {};
       seenIdsRef.current = new Set();
 
+      const activeSubs = newSettings.subreddits.filter((r) => !(newSettings.disabledSubreddits ?? []).includes(r));
+      const activeUsers = newSettings.users.filter((u) => !(newSettings.disabledUsers ?? []).includes(u));
       const result = await fetchAllMedia(
         newSettings.sourceMode,
-        newSettings.subreddits,
-        newSettings.users,
+        activeSubs,
+        activeUsers,
         newSettings.sortOrder,
         newSettings.topTimeframe,
         newSettings.showNsfw

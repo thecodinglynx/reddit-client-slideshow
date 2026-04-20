@@ -90,6 +90,8 @@ export interface SlideshowSettings {
   sourceMode: SourceMode;
   subreddits: string[];
   users: string[];
+  disabledSubreddits: string[];
+  disabledUsers: string[];
   sortOrder: SortOrder;
   topTimeframe: "hour" | "day" | "week" | "month" | "year" | "all";
   imageDuration: number; // seconds
@@ -103,6 +105,8 @@ export const DEFAULT_SETTINGS: SlideshowSettings = {
   sourceMode: "subreddits",
   subreddits: ["earthporn", "pics", "itookapicture"],
   users: [],
+  disabledSubreddits: [],
+  disabledUsers: [],
   sortOrder: "hot",
   topTimeframe: "day",
   imageDuration: 5,
