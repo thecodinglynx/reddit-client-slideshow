@@ -49,6 +49,7 @@ function extractMedia(post: RedditPost): MediaItem | MediaItem[] | null {
         width: video.width,
         height: video.height,
         duration: video.duration,
+        hlsUrl: video.hls_url,
       };
     }
   }

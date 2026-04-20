@@ -80,6 +80,7 @@ export interface MediaItem {
   width?: number;
   height?: number;
   duration?: number;
+  hlsUrl?: string;
 }
 
 export type SortOrder = "hot" | "new" | "top" | "rising";
