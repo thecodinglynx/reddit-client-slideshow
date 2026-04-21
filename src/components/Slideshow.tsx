@@ -449,7 +449,7 @@ export default function Slideshow() {
     <div className="fixed inset-0 bg-black select-none pointer-events-none">
       {/* Interstitial ad */}
       {showAd && AD_SLOT && (
-        <div className="absolute inset-0" style={{ zIndex: 5 }}>
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-auto" style={{ zIndex: 15 }}>
           <AdSlide
             adSlot={AD_SLOT}
             onDone={() => {
@@ -461,7 +461,7 @@ export default function Slideshow() {
       )}
 
       {/* Main media display */}
-      {currentItem && !showAd && (
+      {currentItem && (
         <div className="absolute inset-0" style={{ zIndex: 0 }}>
           <MediaRenderer
             key={currentItem.id}
@@ -488,7 +488,7 @@ export default function Slideshow() {
       )}
 
       {/* Progress bar */}
-      {items.length > 0 && (
+      {items.length > 0 && !showAd && (
         <div className="absolute bottom-0 left-0 right-0 h-0.5 sm:h-1 bg-zinc-900/50" style={{ zIndex: 20 }}>
           <div
             className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-[width] duration-75 ease-linear"
@@ -600,7 +600,7 @@ export default function Slideshow() {
       <div
         style={{ zIndex: 10 }}
         className={`absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
-          showOverlay ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          showOverlay && !showAd ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       >
         <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 sm:p-4 pt-10 sm:pt-12">

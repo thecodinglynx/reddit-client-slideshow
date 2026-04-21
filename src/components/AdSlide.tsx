@@ -32,26 +32,28 @@ export default function AdSlide({ adSlot, onDone, duration = 8 }: AdSlideProps) 
   }, [onDone, duration]);
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950">
-      <span className="text-zinc-600 text-xs uppercase tracking-wider mb-4">
-        Advertisement
-      </span>
-      <div className="w-full max-w-2xl px-4">
+    <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center bg-zinc-950/90 backdrop-blur-sm py-3 px-4 rounded-t-xl">
+      <div className="flex items-center justify-between w-full max-w-2xl mb-2">
+        <span className="text-zinc-500 text-xs uppercase tracking-wider">
+          Advertisement
+        </span>
+        <button
+          onClick={onDone}
+          className="text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors"
+        >
+          Skip ad &times;
+        </button>
+      </div>
+      <div className="w-full max-w-2xl">
         <ins
           className="adsbygoogle"
-          style={{ display: "block" }}
+          style={{ display: "block", maxHeight: "250px" }}
           data-ad-client="ca-pub-3853368383549506"
           data-ad-slot={adSlot}
-          data-ad-format="auto"
+          data-ad-format="horizontal"
           data-full-width-responsive="true"
         />
       </div>
-      <button
-        onClick={onDone}
-        className="mt-6 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
-      >
-        Skip ad
-      </button>
     </div>
   );
 }
