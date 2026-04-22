@@ -10,7 +10,6 @@ import SettingsPanel from "./SettingsPanel";
 import AdSlide from "./AdSlide";
 import CommentsPanel from "./CommentsPanel";
 
-const AD_INTERVAL = 10; // show an ad every N slides
 const AD_SLOT = "9234556481";
 
 export default function Slideshow() {
@@ -34,11 +33,9 @@ export default function Slideshow() {
   const [likes, setLikes] = useState<Map<string, MediaItem>>(new Map());
   const [viewingLikes, setViewingLikes] = useState(false);
   const [fetchingMore, setFetchingMore] = useState(false);
-  const [showAd, setShowAd] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const slidesSinceAd = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -162,17 +159,7 @@ export default function Slideshow() {
   }, [fetchingMore, viewingLikes]);
 
   const goNext = useCallback(() => {
-    if (items.length === 0 || showAd) return;
-
-    // Show interstitial ad every N slides (non-premium only)
-    if (!isPremium && !showAd && AD_SLOT) {
-      slidesSinceAd.current++;
-      if (slidesSinceAd.current >= AD_INTERVAL) {
-        slidesSinceAd.current = 0;
-        setShowAd(true);
-        return;
-      }
-    }
+    if (items.length === 0) return;
 
     setCurrentIndex((i) => {
       const next = (i + 1) % items.length;
@@ -186,16 +173,16 @@ export default function Slideshow() {
     setMediaLoaded(false);
     setShowComments(false);
     videoDurationRef.current = null;
-  }, [items.length, viewingLikes, fetchMore, isPremium, showAd]);
+  }, [items.length, viewingLikes, fetchMore]);
 
   const goPrev = useCallback(() => {
-    if (items.length === 0 || showAd) return;
+    if (items.length === 0) return;
     setCurrentIndex((i) => (i - 1 + items.length) % items.length);
     setProgress(0);
     setMediaLoaded(false);
     setShowComments(false);
     videoDurationRef.current = null;
-  }, [items.length, showAd]);
+  }, [items.length]);
 
   // Auto-advance timer — only starts after media has loaded
   useEffect(() => {
@@ -447,19 +434,6 @@ export default function Slideshow() {
 
   return (
     <div className="fixed inset-0 bg-black select-none pointer-events-none">
-      {/* Interstitial ad */}
-      {showAd && AD_SLOT && (
-        <div className="absolute bottom-0 left-0 right-0 pointer-events-auto" style={{ zIndex: 15 }}>
-          <AdSlide
-            adSlot={AD_SLOT}
-            onDone={() => {
-              setShowAd(false);
-              goNext();
-            }}
-          />
-        </div>
-      )}
-
       {/* Main media display */}
       {currentItem && (
         <div className="absolute inset-0" style={{ zIndex: 0 }}>
@@ -488,7 +462,7 @@ export default function Slideshow() {
       )}
 
       {/* Progress bar */}
-      {items.length > 0 && !showAd && (
+      {items.length > 0 && (
         <div className="absolute bottom-0 left-0 right-0 h-0.5 sm:h-1 bg-zinc-900/50" style={{ zIndex: 20 }}>
           <div
             className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-[width] duration-75 ease-linear"
@@ -497,114 +471,81 @@ export default function Slideshow() {
         </div>
       )}
 
-      {/* Top overlay */}
-      <div
-        style={{ zIndex: 10 }}
-        className={`absolute inset-x-0 top-0 transition-opacity duration-300 ${
-          showOverlay ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
-      >
-        {currentItem && (
-          <div className="bg-gradient-to-b from-black/80 via-black/40 to-transparent p-3 sm:p-4 pb-10 sm:pb-12">
-            <div className="flex items-start justify-between gap-3 sm:gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-white font-medium text-sm sm:text-base line-clamp-2 sm:truncate leading-snug">
-                  {currentItem.title}
-                </p>
-                <div className="text-zinc-400 text-xs sm:text-sm mt-1 flex items-center gap-1.5 flex-wrap">
-                  <button
-                    onClick={() => addSubreddit(currentItem.subreddit)}
-                    className="hover:text-orange-400 active:text-orange-300 transition-colors cursor-pointer"
-                    title={`Add r/${currentItem.subreddit} to subreddit list`}
-                  >
-                    r/{currentItem.subreddit}
-                  </button>
-                  <span className="text-zinc-600">&middot;</span>
-                  <button
-                    onClick={() => addUser(currentItem.author)}
-                    className="hover:text-orange-400 active:text-orange-300 transition-colors cursor-pointer"
-                    title={`Add u/${currentItem.author} to user list`}
-                  >
-                    u/{currentItem.author}
-                  </button>
-                  <span className="text-zinc-600">&middot;</span>
-                  <span>{currentItem.score.toLocaleString()} pts</span>
-                  <span className="text-zinc-600 hidden sm:inline">
-                    [{currentItem.type}]
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {currentItem.type === "video" && (
-                  <button
-                    onClick={() => setIsMuted((m) => !m)}
-                    className={`p-1.5 sm:p-2 rounded-full transition-all active:scale-90 ${
-                      isMuted ? "text-zinc-500 hover:text-orange-400" : "text-orange-400"
-                    }`}
-                    title={isMuted ? "Unmute (M)" : "Mute (M)"}
-                    aria-label={isMuted ? "Unmute" : "Mute"}
-                  >
-                    {isMuted ? (
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                      </svg>
-                    )}
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowComments((s) => !s)}
-                  className={`p-1.5 sm:p-2 rounded-full transition-all active:scale-90 ${
-                    showComments ? "text-orange-400" : "text-zinc-500 hover:text-orange-400"
-                  }`}
-                  title="Comments (C)"
-                  aria-label="Toggle comments"
-                >
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => toggleLike(currentItem)}
-                  className={`p-1.5 sm:p-2 rounded-full transition-all active:scale-90 ${
-                    isLiked
-                      ? "text-red-500 hover:text-red-400"
-                      : "text-zinc-500 hover:text-red-400"
-                  }`}
-                  title="Like (L)"
-                  aria-label={isLiked ? "Unlike this post" : "Like this post"}
-                >
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                </button>
-                <a
-                  href={`https://reddit.com${currentItem.permalink}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hidden sm:block text-zinc-500 hover:text-orange-400 text-xs transition-colors"
-                >
-                  Open on Reddit &rarr;
-                </a>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Persistent ad banner at top (non-premium only) */}
+      {!isPremium && AD_SLOT && (
+        <div className="absolute inset-x-0 top-0 pointer-events-auto" style={{ zIndex: 11 }}>
+          <AdSlide adSlot={AD_SLOT} />
+        </div>
+      )}
 
       {/* Bottom overlay controls */}
       <div
         style={{ zIndex: 10 }}
-        className={`absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
-          showOverlay && !showAd ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        className={`absolute inset-x-0 bottom-0 pointer-events-auto transition-opacity duration-300 ${
+          showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 sm:p-4 pt-10 sm:pt-12">
+        <div className="bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 sm:p-4 pt-10 sm:pt-12">
+          {currentItem && (
+            <div className="mb-2 text-center">
+              <p className="text-white font-medium text-sm sm:text-base line-clamp-2 leading-snug">
+                {currentItem.title}
+              </p>
+              <div className="text-zinc-400 text-xs sm:text-sm mt-1 flex items-center justify-center gap-1.5">
+                <button
+                  onClick={() => addSubreddit(currentItem.subreddit)}
+                  className="hover:text-orange-400 active:text-orange-300 transition-colors cursor-pointer"
+                  title={`Add r/${currentItem.subreddit} to subreddit list`}
+                >
+                  r/{currentItem.subreddit}
+                </button>
+                <span className="text-zinc-600">&middot;</span>
+                <button
+                  onClick={() => addUser(currentItem.author)}
+                  className="hover:text-orange-400 active:text-orange-300 transition-colors cursor-pointer"
+                  title={`Add u/${currentItem.author} to user list`}
+                >
+                  u/{currentItem.author}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-center gap-2 sm:gap-4">
+            {currentItem && currentItem.type === "video" && (
+              <button
+                onClick={() => setIsMuted((m) => !m)}
+                className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-95 hover:bg-white/5 ${
+                  isMuted ? "text-zinc-400 hover:text-white" : "text-orange-400"
+                }`}
+                title={isMuted ? "Unmute (M)" : "Mute (M)"}
+                aria-label={isMuted ? "Unmute" : "Mute"}
+              >
+                {isMuted ? (
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={() => currentItem && setShowComments((s) => !s)}
+              className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-95 hover:bg-white/5 ${
+                showComments ? "text-orange-400" : "text-zinc-400 hover:text-white"
+              }`}
+              title="Comments (C)"
+              aria-label="Toggle comments"
+            >
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </button>
+
             <button
               onClick={goPrev}
               className="p-2 sm:p-2.5 text-zinc-300 hover:text-white active:scale-95 transition-all rounded-full hover:bg-white/5"
@@ -645,14 +586,27 @@ export default function Slideshow() {
               </svg>
             </button>
 
-            <span className="text-zinc-500 text-xs sm:text-sm ml-2 sm:ml-4 tabular-nums">
+            <button
+              onClick={() => currentItem && toggleLike(currentItem)}
+              className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-95 hover:bg-white/5 ${
+                isLiked ? "text-red-500 hover:text-red-400" : "text-zinc-400 hover:text-red-400"
+              }`}
+              title="Like (L)"
+              aria-label={isLiked ? "Unlike this post" : "Like this post"}
+            >
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </button>
+
+            <span className="text-zinc-500 text-xs sm:text-sm tabular-nums">
               {currentIndex + 1} / {items.length}
               {fetchingMore && <span className="ml-1 text-orange-400">+</span>}
             </span>
 
             <button
               onClick={() => setShowSettings(true)}
-              className="ml-1 sm:ml-2 p-2 sm:p-2.5 text-zinc-300 hover:text-white active:scale-95 transition-all rounded-full hover:bg-white/5"
+              className="p-2 sm:p-2.5 text-zinc-300 hover:text-white active:scale-95 transition-all rounded-full hover:bg-white/5"
               title="Settings (Esc)"
               aria-label="Open settings"
             >
@@ -662,7 +616,6 @@ export default function Slideshow() {
               </svg>
             </button>
 
-            {/* Sign-in / Account button */}
             {!isAuthenticated ? (
               <button
                 onClick={() => signIn("google")}

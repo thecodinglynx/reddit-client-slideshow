@@ -10,11 +10,9 @@ declare global {
 
 interface AdSlideProps {
   adSlot: string;
-  onDone: () => void;
-  duration?: number;
 }
 
-export default function AdSlide({ adSlot, onDone, duration = 8 }: AdSlideProps) {
+export default function AdSlide({ adSlot }: AdSlideProps) {
   const pushed = useRef(false);
 
   useEffect(() => {
@@ -26,28 +24,15 @@ export default function AdSlide({ adSlot, onDone, duration = 8 }: AdSlideProps) 
     }
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(onDone, duration * 1000);
-    return () => clearTimeout(timer);
-  }, [onDone, duration]);
-
   return (
-    <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center bg-zinc-950/90 backdrop-blur-sm py-3 px-4 rounded-t-xl">
-      <div className="flex items-center justify-between w-full max-w-2xl mb-2">
-        <span className="text-zinc-500 text-xs uppercase tracking-wider">
-          Advertisement
-        </span>
-        <button
-          onClick={onDone}
-          className="text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors"
-        >
-          Skip ad &times;
-        </button>
-      </div>
+    <div className="flex flex-col items-center bg-zinc-950/90 backdrop-blur-sm py-2 px-4">
+      <span className="text-zinc-500 text-[10px] uppercase tracking-wider mb-1">
+        Advertisement
+      </span>
       <div className="w-full max-w-2xl">
         <ins
           className="adsbygoogle"
-          style={{ display: "block", maxHeight: "250px" }}
+          style={{ display: "block", maxHeight: "100px" }}
           data-ad-client="ca-pub-3853368383549506"
           data-ad-slot={adSlot}
           data-ad-format="horizontal"
