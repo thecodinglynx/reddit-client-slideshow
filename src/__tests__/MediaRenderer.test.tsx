@@ -49,7 +49,7 @@ function makeGifItem(overrides: Partial<MediaItem> = {}): MediaItem {
 describe("MediaRenderer", () => {
   it("renders an image for image type", () => {
     const item = makeImageItem();
-    render(<MediaRenderer item={item} isActive={true} />);
+    render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const img = screen.getByRole("img");
     expect(img).toHaveAttribute("src", item.url);
@@ -58,7 +58,7 @@ describe("MediaRenderer", () => {
 
   it("renders a video element for video type", () => {
     const item = makeVideoItem();
-    const { container } = render(<MediaRenderer item={item} isActive={true} />);
+    const { container } = render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const video = container.querySelector("video");
     expect(video).toBeTruthy();
@@ -68,7 +68,7 @@ describe("MediaRenderer", () => {
 
   it("renders a video element for gif type (muted, loop, no controls)", () => {
     const item = makeGifItem();
-    const { container } = render(<MediaRenderer item={item} isActive={true} />);
+    const { container } = render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const video = container.querySelector("video");
     expect(video).toBeTruthy();
@@ -79,7 +79,7 @@ describe("MediaRenderer", () => {
 
   it("shows loading spinner before media loads", () => {
     const item = makeImageItem();
-    const { container } = render(<MediaRenderer item={item} isActive={true} />);
+    const { container } = render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     // Spinner should be visible (animate-spin class)
     const spinner = container.querySelector(".animate-spin");
@@ -88,7 +88,7 @@ describe("MediaRenderer", () => {
 
   it("hides spinner after image loads", () => {
     const item = makeImageItem();
-    const { container } = render(<MediaRenderer item={item} isActive={true} />);
+    const { container } = render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const img = screen.getByRole("img");
     fireEvent.load(img);
@@ -99,7 +99,7 @@ describe("MediaRenderer", () => {
 
   it("shows error state when image fails to load", () => {
     const item = makeImageItem();
-    render(<MediaRenderer item={item} isActive={true} />);
+    render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const img = screen.getByRole("img");
     fireEvent.error(img);
@@ -110,7 +110,7 @@ describe("MediaRenderer", () => {
 
   it("shows error state when video fails to load", () => {
     const item = makeVideoItem();
-    const { container } = render(<MediaRenderer item={item} isActive={true} />);
+    const { container } = render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const video = container.querySelector("video")!;
     fireEvent.error(video);
@@ -122,7 +122,7 @@ describe("MediaRenderer", () => {
     const onDurationKnown = vi.fn();
     const item = makeVideoItem();
     const { container } = render(
-      <MediaRenderer item={item} isActive={true} onDurationKnown={onDurationKnown} />
+      <MediaRenderer item={item} isActive={true} muted={false} onDurationKnown={onDurationKnown} />
     );
 
     const video = container.querySelector("video")!;
@@ -134,7 +134,7 @@ describe("MediaRenderer", () => {
 
   it("has pointer-events-auto on video elements", () => {
     const item = makeVideoItem();
-    const { container } = render(<MediaRenderer item={item} isActive={true} />);
+    const { container } = render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const video = container.querySelector("video")!;
     expect(video.className).toContain("pointer-events-auto");
@@ -142,7 +142,7 @@ describe("MediaRenderer", () => {
 
   it("applies opacity transition classes", () => {
     const item = makeImageItem();
-    render(<MediaRenderer item={item} isActive={true} />);
+    render(<MediaRenderer item={item} isActive={true} muted={false} />);
 
     const img = screen.getByRole("img");
     // Before load, should have opacity-0

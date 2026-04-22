@@ -30,6 +30,56 @@ function timeAgo(utc: number): string {
   return `${months}mo`;
 }
 
+function renderInline(text: string): React.ReactNode[] {
+  const tokens: React.ReactNode[] = [];
+  const re = /\*\*(.+?)\*\*|\*(.+?)\*|~~(.+?)~~|`(.+?)`|\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+  let last = 0;
+  let match;
+  let key = 0;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) tokens.push(text.slice(last, match.index));
+    if (match[1] != null) tokens.push(<strong key={key++} className="font-semibold text-zinc-100">{match[1]}</strong>);
+    else if (match[2] != null) tokens.push(<em key={key++} className="italic">{match[2]}</em>);
+    else if (match[3] != null) tokens.push(<del key={key++} className="text-zinc-500">{match[3]}</del>);
+    else if (match[4] != null) tokens.push(<code key={key++} className="bg-zinc-800 text-orange-300 px-1 rounded text-xs">{match[4]}</code>);
+    else if (match[5] != null) tokens.push(<a key={key++} href={match[6]} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{match[5]}</a>);
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) tokens.push(text.slice(last));
+  return tokens;
+}
+
+function renderMarkdown(body: string): React.ReactNode[] {
+  const lines = body.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+
+  while (i < lines.length) {
+    if (lines[i].startsWith(">")) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && lines[i].startsWith(">")) {
+        quoteLines.push(lines[i].replace(/^>\s?/, ""));
+        i++;
+      }
+      elements.push(
+        <blockquote key={key++} className="border-l-2 border-zinc-600 pl-3 my-1 text-zinc-400 italic">
+          {quoteLines.map((l, j) => (
+            <span key={j}>{renderInline(l)}{j < quoteLines.length - 1 && <br />}</span>
+          ))}
+        </blockquote>
+      );
+    } else if (lines[i].trim() === "") {
+      elements.push(<br key={key++} />);
+      i++;
+    } else {
+      elements.push(<span key={key++}>{renderInline(lines[i])}<br /></span>);
+      i++;
+    }
+  }
+  return elements;
+}
+
 function CommentNode({ comment }: { comment: Comment }) {
   const [collapsed, setCollapsed] = useState(false);
   const maxDepth = 4;
@@ -53,9 +103,9 @@ function CommentNode({ comment }: { comment: Comment }) {
         </button>
         {!collapsed && (
           <>
-            <p className="text-zinc-200 text-sm leading-relaxed whitespace-pre-wrap break-words">
-              {comment.body}
-            </p>
+            <div className="text-zinc-200 text-sm leading-relaxed break-words">
+              {renderMarkdown(comment.body)}
+            </div>
             {comment.replies.length > 0 && (
               <div className="mt-1 border-l border-zinc-800">
                 {comment.replies.map((reply) => (
@@ -74,6 +124,10 @@ export default function CommentsPanel({ permalink, onClose }: CommentsPanelProps
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(() => Math.round(window.innerHeight * 0.25));
+  const dragging = useRef(false);
+  const startY = useRef(0);
+  const startH = useRef(0);
 
   useEffect(() => {
     setLoading(true);
@@ -108,13 +162,53 @@ export default function CommentsPanel({ permalink, onClose }: CommentsPanelProps
     };
   }, []);
 
+  useEffect(() => {
+    const onMove = (clientY: number) => {
+      if (!dragging.current) return;
+      const delta = startY.current - clientY;
+      const minH = 80;
+      const maxH = window.innerHeight * 0.85;
+      setHeight(Math.max(minH, Math.min(maxH, startH.current + delta)));
+    };
+    const onEnd = () => { dragging.current = false; };
+
+    const handleMouseMove = (e: MouseEvent) => onMove(e.clientY);
+    const handleTouchMove = (e: TouchEvent) => onMove(e.touches[0].clientY);
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", handleTouchMove);
+    window.addEventListener("touchend", onEnd);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", onEnd);
+    };
+  }, []);
+
+  const startDrag = (clientY: number) => {
+    dragging.current = true;
+    startY.current = clientY;
+    startH.current = height;
+  };
+
   return (
     <div
       ref={panelRef}
       className="absolute inset-x-0 bottom-0 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/60 rounded-t-2xl flex flex-col pointer-events-auto animate-slide-up"
-      style={{ zIndex: 25, maxHeight: "60vh" }}
+      style={{ zIndex: 25, height }}
     >
-      <div className="flex items-center justify-between px-4 py-3 shrink-0 border-b border-zinc-800/40">
+      {/* Drag handle */}
+      <div
+        className="flex justify-center py-2 cursor-row-resize shrink-0 touch-none"
+        onMouseDown={(e) => startDrag(e.clientY)}
+        onTouchStart={(e) => startDrag(e.touches[0].clientY)}
+      >
+        <div className="w-10 h-1 rounded-full bg-zinc-600" />
+      </div>
+
+      <div className="flex items-center justify-between px-4 pb-2 shrink-0 border-b border-zinc-800/40">
         <span className="text-zinc-300 text-sm font-medium">
           Comments {!loading && `(${comments.length})`}
         </span>

@@ -59,7 +59,7 @@ describe("Stripe webhook route", () => {
           customer: "cus_123",
         },
       },
-    } as Stripe.Event;
+    } as unknown as Stripe.Event;
 
     mockedStripe.webhooks.constructEvent.mockReturnValue(event);
     mockedStripe.subscriptions.retrieve.mockResolvedValue({

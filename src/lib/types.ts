@@ -100,6 +100,7 @@ export interface SlideshowSettings {
   videoDuration: number; // seconds, 0 = full video length
   showNsfw: boolean;
   autoPlay: boolean;
+  pauseOnComments: boolean;
 }
 
 export const DEFAULT_SETTINGS: SlideshowSettings = {
@@ -115,6 +116,7 @@ export const DEFAULT_SETTINGS: SlideshowSettings = {
   videoDuration: 0,
   showNsfw: false,
   autoPlay: true,
+  pauseOnComments: true,
 };
 
 export interface ContentProgress {

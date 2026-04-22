@@ -40,6 +40,7 @@ export default function Slideshow() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef = useRef(0);
   const videoDurationRef = useRef<number | null>(null);
   const hideOverlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartX = useRef<number | null>(null);
@@ -173,6 +174,7 @@ export default function Slideshow() {
     setMediaLoaded(false);
     setShowComments(false);
     videoDurationRef.current = null;
+    elapsedRef.current = 0;
   }, [items.length, viewingLikes, fetchMore]);
 
   const goPrev = useCallback(() => {
@@ -182,6 +184,7 @@ export default function Slideshow() {
     setMediaLoaded(false);
     setShowComments(false);
     videoDurationRef.current = null;
+    elapsedRef.current = 0;
   }, [items.length]);
 
   // Auto-advance timer — only starts after media has loaded
@@ -190,25 +193,29 @@ export default function Slideshow() {
     if (progressRef.current) clearInterval(progressRef.current);
 
     if (!isPlaying || items.length === 0 || !mediaLoaded) return;
+    if (showComments && settings.pauseOnComments) return;
 
     const duration = getDuration() * 1000;
+    const remaining = duration - elapsedRef.current;
     const progressInterval = 50;
 
     const startTime = Date.now();
     progressRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime;
+      const elapsed = elapsedRef.current + (Date.now() - startTime);
       setProgress(Math.min(elapsed / duration, 1));
     }, progressInterval);
 
     timerRef.current = setTimeout(() => {
+      elapsedRef.current = 0;
       goNext();
-    }, duration);
+    }, remaining);
 
     return () => {
+      elapsedRef.current += Date.now() - startTime;
       if (timerRef.current) clearTimeout(timerRef.current);
       if (progressRef.current) clearInterval(progressRef.current);
     };
-  }, [isPlaying, currentIndex, items.length, getDuration, goNext, mediaLoaded]);
+  }, [isPlaying, currentIndex, items.length, getDuration, goNext, mediaLoaded, showComments, settings.pauseOnComments]);
 
   // Keyboard controls
   useEffect(() => {
@@ -452,6 +459,7 @@ export default function Slideshow() {
             muted={isMuted}
             onDurationKnown={handleVideoDuration}
             onLoaded={handleMediaLoaded}
+            onError={goNext}
           />
         </div>
       )}
@@ -607,10 +615,6 @@ export default function Slideshow() {
               </svg>
             </button>
 
-            <span className="text-zinc-500 text-xs sm:text-sm tabular-nums">
-              {currentIndex + 1} / {items.length}
-              {fetchingMore && <span className="ml-1 text-orange-400">+</span>}
-            </span>
 
             <button
               onClick={() => setShowSettings(true)}

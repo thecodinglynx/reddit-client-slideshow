@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import SettingsPanel from "@/components/SettingsPanel";
 import { DEFAULT_SETTINGS, SlideshowSettings } from "@/lib/types";
@@ -17,8 +17,6 @@ function mockFetchResponses(responses: Array<{ url: string; body: unknown }>) {
 
 function renderPanel(overrides: Partial<{
   settings: SlideshowSettings;
-  onSave: (s: SlideshowSettings) => void;
-  onClose: () => void;
   isLoading: boolean;
   likedCount: number;
 }> = {}) {

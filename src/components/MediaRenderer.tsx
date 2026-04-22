@@ -8,6 +8,7 @@ interface MediaRendererProps {
   item: MediaItem;
   onDurationKnown?: (duration: number) => void;
   onLoaded?: () => void;
+  onError?: () => void;
   isActive: boolean;
   muted: boolean;
 }
@@ -28,6 +29,7 @@ export default function MediaRenderer({
   item,
   onDurationKnown,
   onLoaded,
+  onError,
   isActive,
   muted,
 }: MediaRendererProps) {
@@ -103,16 +105,11 @@ export default function MediaRenderer({
     videoRef.current.muted = item.type === "gif" || muted;
   }, [muted, item.type]);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center w-full h-full">
-        <div className="text-zinc-500 text-center p-8">
-          <p className="text-lg">Failed to load media</p>
-          <p className="text-sm mt-2 text-zinc-600">{item.url}</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (error) onError?.();
+  }, [error, onError]);
+
+  if (error) return null;
 
   if (item.type === "video" || item.type === "gif") {
     return (

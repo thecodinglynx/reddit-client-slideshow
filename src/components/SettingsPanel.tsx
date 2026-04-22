@@ -626,6 +626,26 @@ export default function SettingsPanel({
             </button>
           </div>
 
+          {/* Pause on comments toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-zinc-300">Pause when comments open</span>
+            <button
+              onClick={() => setDraft({ ...draft, pauseOnComments: !draft.pauseOnComments })}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                draft.pauseOnComments ? "bg-orange-600" : "bg-zinc-700"
+              }`}
+              role="switch"
+              aria-checked={draft.pauseOnComments}
+              aria-label="Toggle pause when comments are open"
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${
+                  draft.pauseOnComments ? "translate-x-5" : ""
+                }`}
+              />
+            </button>
+          </div>
+
         </div>
         <div className="flex gap-3 p-5 sm:p-6 pt-3 sm:pt-3 border-t border-zinc-800 shrink-0">
           <button
