@@ -548,7 +548,7 @@ export default function SettingsPanel({
                 <input
                   type="range"
                   min="2"
-                  max="30"
+                  max="60"
                   value={draft.imageDuration}
                   onChange={(e) =>
                     setDraft({
@@ -570,7 +570,7 @@ export default function SettingsPanel({
                 <input
                   type="range"
                   min="3"
-                  max="30"
+                  max="60"
                   value={draft.gifDuration}
                   onChange={(e) =>
                     setDraft({ ...draft, gifDuration: Number(e.target.value) })

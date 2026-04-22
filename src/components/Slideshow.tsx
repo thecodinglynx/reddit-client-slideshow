@@ -23,8 +23,8 @@ export default function Slideshow() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [showSettings, setShowSettings] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [showOverlay, setShowOverlay] = useState(true);
@@ -421,6 +421,14 @@ export default function Slideshow() {
       setIsLoading(false);
     }
   };
+
+  const autoLoaded = useRef(false);
+  useEffect(() => {
+    if (hydrated && !autoLoaded.current) {
+      autoLoaded.current = true;
+      loadMedia(settings);
+    }
+  }, [hydrated]);
 
   const handleVideoDuration = useCallback((duration: number) => {
     videoDurationRef.current = duration;

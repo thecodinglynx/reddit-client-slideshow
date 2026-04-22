@@ -22,12 +22,12 @@ describe("DEFAULT_SETTINGS", () => {
     expect(DEFAULT_SETTINGS.topTimeframe).toBe("day");
   });
 
-  it("has 5s image duration", () => {
-    expect(DEFAULT_SETTINGS.imageDuration).toBe(5);
+  it("has 30s image duration", () => {
+    expect(DEFAULT_SETTINGS.imageDuration).toBe(30);
   });
 
-  it("has 8s gif duration", () => {
-    expect(DEFAULT_SETTINGS.gifDuration).toBe(8);
+  it("has 30s gif duration", () => {
+    expect(DEFAULT_SETTINGS.gifDuration).toBe(30);
   });
 
   it("has 0 (full) video duration", () => {
