@@ -150,15 +150,16 @@ export default function CommentsPanel({ permalink, onClose }: CommentsPanelProps
     return () => window.removeEventListener("keydown", handler, true);
   }, [onClose]);
 
+  const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const panel = panelRef.current;
-    if (!panel) return;
+    const content = contentRef.current;
+    if (!content) return;
     const stop = (e: TouchEvent) => e.stopPropagation();
-    panel.addEventListener("touchstart", stop, { passive: true });
-    panel.addEventListener("touchend", stop, { passive: true });
+    content.addEventListener("touchstart", stop, { passive: true });
+    content.addEventListener("touchend", stop, { passive: true });
     return () => {
-      panel.removeEventListener("touchstart", stop);
-      panel.removeEventListener("touchend", stop);
+      content.removeEventListener("touchstart", stop);
+      content.removeEventListener("touchend", stop);
     };
   }, []);
 
@@ -173,11 +174,14 @@ export default function CommentsPanel({ permalink, onClose }: CommentsPanelProps
     const onEnd = () => { dragging.current = false; };
 
     const handleMouseMove = (e: MouseEvent) => onMove(e.clientY);
-    const handleTouchMove = (e: TouchEvent) => onMove(e.touches[0].clientY);
+    const handleTouchMove = (e: TouchEvent) => {
+      if (dragging.current) e.preventDefault();
+      onMove(e.touches[0].clientY);
+    };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", onEnd);
-    window.addEventListener("touchmove", handleTouchMove);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
     window.addEventListener("touchend", onEnd);
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
@@ -223,7 +227,7 @@ export default function CommentsPanel({ permalink, onClose }: CommentsPanelProps
         </button>
       </div>
 
-      <div className="overflow-y-auto flex-1 px-4 pb-4 overscroll-contain">
+      <div ref={contentRef} className="overflow-y-auto flex-1 px-4 pb-4 overscroll-contain">
         {loading && (
           <div className="flex items-center justify-center py-8">
             <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
