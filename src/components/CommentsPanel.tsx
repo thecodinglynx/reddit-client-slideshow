@@ -208,7 +208,7 @@ export default function CommentsPanel({ permalink, onClose }: CommentsPanelProps
         className="shrink-0 cursor-row-resize touch-none border-b border-zinc-800/40 select-none"
         onMouseDown={(e) => startDrag(e.clientY)}
         onTouchStart={(e) => { e.stopPropagation(); startDrag(e.touches[0].clientY); }}
-        onTouchEnd={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => { e.stopPropagation(); dragging.current = false; }}
       >
         <div className="flex justify-center pt-2 pb-1">
           <div className="w-10 h-1 rounded-full bg-zinc-600" />
