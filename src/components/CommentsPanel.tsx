@@ -203,28 +203,32 @@ export default function CommentsPanel({ permalink, onClose }: CommentsPanelProps
       className="absolute inset-x-0 bottom-0 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/60 rounded-t-2xl flex flex-col pointer-events-auto animate-slide-up"
       style={{ zIndex: 25, height }}
     >
-      {/* Drag handle */}
+      {/* Draggable header */}
       <div
-        className="flex justify-center py-2 cursor-row-resize shrink-0 touch-none"
+        className="shrink-0 cursor-row-resize touch-none border-b border-zinc-800/40 select-none"
         onMouseDown={(e) => startDrag(e.clientY)}
-        onTouchStart={(e) => startDrag(e.touches[0].clientY)}
+        onTouchStart={(e) => { e.stopPropagation(); startDrag(e.touches[0].clientY); }}
+        onTouchEnd={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-zinc-600" />
-      </div>
-
-      <div className="flex items-center justify-between px-4 pb-2 shrink-0 border-b border-zinc-800/40">
-        <span className="text-zinc-300 text-sm font-medium">
-          Comments {!loading && `(${comments.length})`}
-        </span>
-        <button
-          onClick={onClose}
-          className="text-zinc-500 hover:text-white transition-colors p-1"
-          aria-label="Close comments"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex justify-center pt-2 pb-1">
+          <div className="w-10 h-1 rounded-full bg-zinc-600" />
+        </div>
+        <div className="flex items-center justify-between px-4 pb-2">
+          <span className="text-zinc-300 text-sm font-medium">
+            Comments {!loading && `(${comments.length})`}
+          </span>
+          <button
+            onClick={onClose}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            className="text-zinc-500 hover:text-white transition-colors p-1"
+            aria-label="Close comments"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div ref={contentRef} className="overflow-y-auto flex-1 px-4 pb-4 overscroll-contain">
