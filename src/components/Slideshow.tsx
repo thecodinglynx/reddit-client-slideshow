@@ -55,7 +55,7 @@ export default function Slideshow() {
 
   const currentItem = items[currentIndex] ?? null;
 
-  // Load settings and likes on mount (from DB if authenticated, localStorage otherwise)
+  // Load settings and likes on mount (from DB if authenticated, sessionStorage otherwise)
   useEffect(() => {
     let cancelled = false;
     async function init() {

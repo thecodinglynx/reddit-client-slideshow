@@ -16,12 +16,11 @@ export default function AdSlide({ adSlot }: AdSlideProps) {
   const pushed = useRef(false);
 
   useEffect(() => {
-    if (!pushed.current && window.adsbygoogle) {
-      try {
-        window.adsbygoogle.push({});
-      } catch { /* ad already pushed */ }
-      pushed.current = true;
-    }
+    if (pushed.current) return;
+    pushed.current = true;
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch { /* ad already pushed */ }
   }, []);
 
   return (

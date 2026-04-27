@@ -3,12 +3,12 @@ import { SlideshowSettings, DEFAULT_SETTINGS, MediaItem, ContentProgress } from 
 const SETTINGS_KEY = "reddit-slideshow-settings";
 const LIKES_KEY = "reddit-slideshow-likes";
 
-// ── localStorage helpers (always used as local cache) ────────
+// ── sessionStorage helpers (used as local cache) ───────────
 
 function readLocalSettings(): SlideshowSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
+    const raw = sessionStorage.getItem(SETTINGS_KEY);
     return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : DEFAULT_SETTINGS;
   } catch {
     return DEFAULT_SETTINGS;
@@ -18,14 +18,14 @@ function readLocalSettings(): SlideshowSettings {
 function writeLocalSettings(settings: SlideshowSettings) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    sessionStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch { /* quota exceeded, ignore */ }
 }
 
 function readLocalLikes(): Map<string, MediaItem> {
   if (typeof window === "undefined") return new Map();
   try {
-    const raw = localStorage.getItem(LIKES_KEY);
+    const raw = sessionStorage.getItem(LIKES_KEY);
     if (!raw) return new Map();
     const arr: MediaItem[] = JSON.parse(raw);
     return new Map(arr.map((item) => [item.id, item]));
@@ -37,7 +37,7 @@ function readLocalLikes(): Map<string, MediaItem> {
 function writeLocalLikes(likes: Map<string, MediaItem>) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(LIKES_KEY, JSON.stringify([...likes.values()]));
+    sessionStorage.setItem(LIKES_KEY, JSON.stringify([...likes.values()]));
   } catch { /* quota exceeded, ignore */ }
 }
 
@@ -55,7 +55,7 @@ export async function loadSettings(
         writeLocalSettings(settings);
         return settings;
       }
-    } catch { /* fall through to localStorage */ }
+    } catch { /* fall through to sessionStorage */ }
   }
   return readLocalSettings();
 }
@@ -95,7 +95,7 @@ export async function loadLikes(
         writeLocalLikes(map);
         return map;
       }
-    } catch { /* fall through to localStorage */ }
+    } catch { /* fall through to sessionStorage */ }
   }
   return readLocalLikes();
 }
