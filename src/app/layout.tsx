@@ -30,7 +30,6 @@ export default function RootLayout({
         <AuthProvider>{children}</AuthProvider>
         <Script
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3853368383549506"
-          crossOrigin="anonymous"
           strategy="afterInteractive"
         />
       </body>
