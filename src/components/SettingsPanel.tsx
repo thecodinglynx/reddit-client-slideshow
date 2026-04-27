@@ -9,6 +9,7 @@ interface SubredditSuggestion {
   subscribers: number;
   description: string;
   over18: boolean;
+  score?: number;
 }
 
 interface SettingsPanelProps {
@@ -80,79 +81,72 @@ export default function SettingsPanel({
   const [userInput, setUserInput] = useState("");
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<SubredditSuggestion[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const suggestionsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const suggestionSeedIndex = useRef(0);
+  const [searchResults, setSearchResults] = useState<SubredditSuggestion[]>([]);
+  const [showSearch, setShowSearch] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchSuggestions = useCallback(async (query: string, append = false) => {
+  const [discoveries, setDiscoveries] = useState<SubredditSuggestion[]>([]);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+
+  const fetchSearchResults = useCallback(async (query: string) => {
     if (query.length < 2) {
-      if (!append) {
-        setSuggestions([]);
-        setShowSuggestions(false);
-      }
+      setSearchResults([]);
+      setShowSearch(false);
       return;
     }
-    setSuggestionsLoading(true);
     try {
-      const res = await fetch(`/api/reddit/search?q=${encodeURIComponent(query)}&limit=10&nsfw=${draft.showNsfw ? "1" : "0"}`);
+      const res = await fetch(`/api/reddit/search?q=${encodeURIComponent(query)}&limit=8&nsfw=${draft.showNsfw ? "1" : "0"}`);
       const data = await res.json();
-      const results = data.results as SubredditSuggestion[];
-
-      if (append) {
-        setSuggestions((prev) => {
-          const existingNames = new Set(prev.map((s) => s.name.toLowerCase()));
-          const newItems = results.filter(
-            (s) => !existingNames.has(s.name.toLowerCase()) &&
-                   !draft.subreddits.includes(s.name.toLowerCase())
-          );
-          const combined = [...prev, ...newItems];
-          setShowSuggestions(combined.length > 0);
-          return combined;
-        });
-      } else {
-        const filtered = results.filter(
-          (s) => !draft.subreddits.includes(s.name.toLowerCase()) &&
-                 s.name.toLowerCase() !== query.toLowerCase()
-        );
-        setSuggestions(filtered);
-        setShowSuggestions(filtered.length > 0);
-      }
+      const filtered = (data.results as SubredditSuggestion[]).filter(
+        (s) => !draft.subreddits.includes(s.name.toLowerCase()) &&
+               s.name.toLowerCase() !== query.toLowerCase()
+      );
+      setSearchResults(filtered);
+      setShowSearch(filtered.length > 0);
     } catch {
-      if (!append) setSuggestions([]);
-    } finally {
-      setSuggestionsLoading(false);
+      setSearchResults([]);
     }
-  }, [draft.subreddits]);
+  }, [draft.subreddits, draft.showNsfw]);
 
-  const loadMoreSuggestions = useCallback(() => {
+  const fetchDiscoveries = useCallback(async () => {
     if (draft.subreddits.length === 0) return;
-    suggestionSeedIndex.current = (suggestionSeedIndex.current + 1) % draft.subreddits.length;
-    const seed = draft.subreddits[suggestionSeedIndex.current];
-    fetchSuggestions(seed, true);
-  }, [draft.subreddits, fetchSuggestions]);
+    setDiscoverLoading(true);
+    try {
+      const seeds = draft.subreddits.join(",");
+      const res = await fetch(`/api/reddit/discover?seeds=${encodeURIComponent(seeds)}&nsfw=${draft.showNsfw ? "1" : "0"}`);
+      const data = await res.json();
+      const filtered = (data.results as SubredditSuggestion[]).filter(
+        (s) => !draft.subreddits.includes(s.name.toLowerCase())
+      );
+      setDiscoveries(filtered);
+    } catch {
+      setDiscoveries([]);
+    } finally {
+      setDiscoverLoading(false);
+    }
+  }, [draft.subreddits, draft.showNsfw]);
 
   // Debounced search as user types
   useEffect(() => {
     setValidationError(null);
-    if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
 
     const cleaned = subredditInput.trim().replace(/^\/?(r\/)?/, "");
     if (cleaned.length < 2) {
-      setSuggestions([]);
-      setShowSuggestions(false);
+      setSearchResults([]);
+      setShowSearch(false);
       return;
     }
 
-    suggestionsTimer.current = setTimeout(() => {
-      fetchSuggestions(cleaned);
+    searchTimer.current = setTimeout(() => {
+      fetchSearchResults(cleaned);
     }, 400);
 
     return () => {
-      if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [subredditInput, fetchSuggestions]);
+  }, [subredditInput, fetchSearchResults]);
 
   const validateAndAddSubreddit = async (name: string) => {
     const cleaned = name.trim().replace(/^\/?(r\/)?/, "");
@@ -186,11 +180,8 @@ export default function SettingsPanel({
 
       setDraft((d) => ({ ...d, subreddits: [...d.subreddits, canonicalName.toLowerCase()] }));
       setSubredditInput("");
-      setSuggestions([]);
-      setShowSuggestions(false);
-
-      // Fetch suggestions based on the added subreddit
-      fetchSuggestions(canonicalName);
+      setSearchResults([]);
+      setShowSearch(false);
     } catch {
       setValidationError("Failed to verify subreddit. Try again.");
     } finally {
@@ -202,7 +193,8 @@ export default function SettingsPanel({
     const lower = name.toLowerCase();
     if (!draft.subreddits.includes(lower)) {
       setDraft((d) => ({ ...d, subreddits: [...d.subreddits, lower] }));
-      setSuggestions((prev) => prev.filter((s) => s.name.toLowerCase() !== lower));
+      setSearchResults((prev) => prev.filter((s) => s.name.toLowerCase() !== lower));
+      setDiscoveries((prev) => prev.filter((s) => s.name.toLowerCase() !== lower));
     }
   };
 
@@ -230,16 +222,15 @@ export default function SettingsPanel({
     });
   };
 
-  // Load suggestions based on existing subreddits when panel opens
+  // Auto-load/refresh discoveries when section is open and subreddits change
+  const prevSubsKey = useRef("");
   useEffect(() => {
-    if (draft.sourceMode === "subreddits" && draft.subreddits.length > 0 && suggestions.length === 0) {
-      // Pick a random existing subreddit to seed suggestions
-      const seed = draft.subreddits[Math.floor(Math.random() * draft.subreddits.length)];
-      fetchSuggestions(seed);
-    }
-    // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!discoverOpen || draft.subreddits.length === 0) return;
+    const key = [...draft.subreddits].sort().join(",");
+    if (key === prevSubsKey.current) return;
+    prevSubsKey.current = key;
+    fetchDiscoveries();
+  }, [discoverOpen, draft.subreddits, fetchDiscoveries]);
 
   const formatSubscribers = (count: number) => {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
@@ -385,39 +376,103 @@ export default function SettingsPanel({
                 )}
               </div>
 
-              {/* Suggestions */}
-              {(showSuggestions || suggestionsLoading) && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-zinc-500 uppercase tracking-wider">Suggestions</span>
-                    {suggestionsLoading && (
-                      <span className="w-3 h-3 border border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {suggestions.map((s) => (
-                      <button
-                        key={s.name}
-                        onClick={() => addSuggestion(s.name)}
-                        className="group inline-flex items-center gap-1.5 bg-zinc-800/50 hover:bg-zinc-700/80 active:bg-zinc-600 border border-zinc-700/30 hover:border-orange-500/30 text-zinc-300 hover:text-white px-2.5 py-1.5 rounded-full text-xs transition-all"
-                        title={s.description || `r/${s.name}`}
-                      >
-                        <span className="text-orange-400/70 group-hover:text-orange-400">+</span>
-                        r/{s.name}
-                        <span className="text-zinc-600 text-[10px]">
-                          {formatSubscribers(s.subscribers)}
-                        </span>
-                      </button>
-                    ))}
-                    {draft.subreddits.length > 0 && !suggestionsLoading && (
-                      <button
-                        onClick={loadMoreSuggestions}
-                        className="inline-flex items-center gap-1 bg-zinc-800/30 hover:bg-zinc-700/60 active:bg-zinc-600 border border-dashed border-zinc-700/40 hover:border-orange-500/30 text-zinc-500 hover:text-zinc-300 px-2.5 py-1.5 rounded-full text-xs transition-all"
-                      >
-                        More...
-                      </button>
-                    )}
-                  </div>
+              {/* Search autocomplete */}
+              {showSearch && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {searchResults.map((s) => (
+                    <button
+                      key={s.name}
+                      onClick={() => addSuggestion(s.name)}
+                      className="group inline-flex items-center gap-1.5 bg-zinc-800/50 hover:bg-zinc-700/80 active:bg-zinc-600 border border-zinc-700/30 hover:border-orange-500/30 text-zinc-300 hover:text-white px-2.5 py-1.5 rounded-full text-xs transition-all"
+                      title={s.description || `r/${s.name}`}
+                    >
+                      <span className="text-orange-400/70 group-hover:text-orange-400">+</span>
+                      r/{s.name}
+                      <span className="text-zinc-600 text-[10px]">
+                        {formatSubscribers(s.subscribers)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Discover section */}
+              {draft.subreddits.length > 0 && (
+                <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setDiscoverOpen((v) => !v)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 bg-zinc-800/40 hover:bg-zinc-800/70 transition-colors"
+                  >
+                    <span className="flex items-center gap-2 text-xs sm:text-sm font-medium text-zinc-400 uppercase tracking-wider">
+                      <svg className="w-4 h-4 text-orange-500/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+                      </svg>
+                      Discover subreddits
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-zinc-500 transition-transform ${discoverOpen ? "rotate-180" : ""}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+
+                  {discoverOpen && (
+                    <div className="px-3 py-3 space-y-2">
+                      {discoverLoading && discoveries.length === 0 && (
+                        <div className="flex items-center justify-center gap-2 py-4 text-zinc-500 text-sm">
+                          <span className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
+                          Finding related subreddits...
+                        </div>
+                      )}
+
+                      {!discoverLoading && discoveries.length === 0 && (
+                        <p className="text-zinc-600 text-sm text-center py-3">
+                          No discoveries found. Try adding more subreddits.
+                        </p>
+                      )}
+
+                      <div className="space-y-1.5">
+                        {discoveries.map((s) => (
+                          <button
+                            key={s.name}
+                            onClick={() => addSuggestion(s.name)}
+                            className="w-full group flex items-start gap-3 bg-zinc-800/30 hover:bg-zinc-700/60 active:bg-zinc-600 border border-zinc-700/20 hover:border-orange-500/30 rounded-lg px-3 py-2 text-left transition-all"
+                          >
+                            <span className="text-orange-400/60 group-hover:text-orange-400 mt-0.5 text-sm shrink-0">+</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-zinc-200 group-hover:text-white font-medium">r/{s.name}</span>
+                                <span className="text-zinc-600 text-[10px] shrink-0">{formatSubscribers(s.subscribers)}</span>
+                              </div>
+                              {s.description && (
+                                <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">{s.description}</p>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
+                      {!discoverLoading && discoveries.length > 0 && (
+                        <button
+                          onClick={fetchDiscoveries}
+                          className="w-full flex items-center justify-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 py-2 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="23 4 23 10 17 10" />
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                          </svg>
+                          Refresh
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
