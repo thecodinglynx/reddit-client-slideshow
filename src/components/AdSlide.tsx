@@ -14,8 +14,8 @@ interface AdSlideProps {
 
 export default function AdSlide({ adSlot }: AdSlideProps) {
   const pushed = useRef(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const [filled, setFilled] = useState(false);
+  const insRef = useRef<HTMLModElement>(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (pushed.current) return;
@@ -25,40 +25,41 @@ export default function AdSlide({ adSlot }: AdSlideProps) {
     } catch { /* ad already pushed */ }
   }, []);
 
+  // Watch for AdSense injecting content into the <ins> element
   useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
+    const ins = insRef.current;
+    if (!ins) return;
 
-    const observer = new MutationObserver(() => {
-      const ins = el.querySelector("ins.adsbygoogle");
-      if (ins && ins.childElementCount > 0) {
-        setFilled(true);
+    const check = () => {
+      if (ins.dataset.adStatus === "filled") {
+        setVisible(true);
+        observer.disconnect();
+      } else if (ins.dataset.adStatus === "unfilled") {
         observer.disconnect();
       }
-    });
+    };
 
-    observer.observe(el, { childList: true, subtree: true });
+    const observer = new MutationObserver(check);
+    observer.observe(ins, { attributes: true, childList: true, subtree: true });
+    check();
+
     return () => observer.disconnect();
   }, []);
 
   return (
     <div
-      ref={wrapperRef}
-      className={
-        filled
-          ? "flex flex-col items-center bg-zinc-950/90 backdrop-blur-sm py-1 px-4"
-          : "h-0 overflow-hidden"
-      }
+      style={{ height: visible ? "auto" : 0, overflow: "hidden" }}
     >
-      <div className="w-full max-w-2xl">
-        <ins
-          className="adsbygoogle"
-          style={{ display: "block", maxHeight: "90px" }}
-          data-ad-client="ca-pub-3853368383549506"
-          data-ad-slot={adSlot}
-          data-ad-format="horizontal"
-          data-full-width-responsive="true"
-        />
+      <div className="flex flex-col items-center bg-zinc-950/90 backdrop-blur-sm py-1 px-4">
+        <div className="w-full max-w-2xl">
+          <ins
+            ref={insRef}
+            className="adsbygoogle"
+            style={{ display: "inline-block", width: "100%", height: "50px" }}
+            data-ad-client="ca-pub-3853368383549506"
+            data-ad-slot={adSlot}
+          />
+        </div>
       </div>
     </div>
   );
