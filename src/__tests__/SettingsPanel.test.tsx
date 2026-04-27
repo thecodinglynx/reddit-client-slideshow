@@ -3,30 +3,11 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import SettingsPanel from "@/components/SettingsPanel";
 import { DEFAULT_SETTINGS, SlideshowSettings } from "@/lib/types";
 
-// Mock fetch for validation/suggestions
-function mockFetchResponses(responses: Array<{ url: string; body: unknown }>) {
-  const fetchSpy = vi.spyOn(global, "fetch");
-  for (const r of responses) {
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => r.body,
-    } as Response);
-  }
-  return fetchSpy;
-}
-
 function renderPanel(overrides: Partial<{
   settings: SlideshowSettings;
   isLoading: boolean;
   likedCount: number;
 }> = {}) {
-  // Mock the initial suggestions fetch
-  const fetchSpy = vi.spyOn(global, "fetch");
-  fetchSpy.mockResolvedValueOnce({
-    ok: true,
-    json: async () => ({ results: [] }),
-  } as Response);
-
   const props = {
     settings: DEFAULT_SETTINGS,
     onSave: vi.fn(),
@@ -36,7 +17,7 @@ function renderPanel(overrides: Partial<{
     ...overrides,
   };
   const result = render(<SettingsPanel {...props} />);
-  return { ...result, ...props, fetchSpy };
+  return { ...result, ...props };
 }
 
 describe("SettingsPanel", () => {
@@ -71,17 +52,14 @@ describe("SettingsPanel", () => {
   });
 
   it("validates subreddit before adding", async () => {
-    const { fetchSpy } = renderPanel();
+    const fetchSpy = vi.spyOn(global, "fetch");
+
+    renderPanel();
 
     // Mock the validation response
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ exists: true, name: "wallpapers", subscribers: 100000 }),
-    } as Response);
-    // Mock suggestions after adding
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ results: [] }),
     } as Response);
 
     const input = screen.getByPlaceholderText("e.g. earthporn");
@@ -96,7 +74,9 @@ describe("SettingsPanel", () => {
   });
 
   it("shows error for non-existent subreddit", async () => {
-    const { fetchSpy } = renderPanel();
+    const fetchSpy = vi.spyOn(global, "fetch");
+
+    renderPanel();
 
     fetchSpy.mockResolvedValueOnce({
       ok: true,
@@ -114,7 +94,9 @@ describe("SettingsPanel", () => {
   });
 
   it("shows error for duplicate subreddit", async () => {
-    const { fetchSpy } = renderPanel();
+    const fetchSpy = vi.spyOn(global, "fetch");
+
+    renderPanel();
 
     fetchSpy.mockResolvedValueOnce({
       ok: true,
@@ -131,15 +113,13 @@ describe("SettingsPanel", () => {
   });
 
   it("strips r/ prefix from subreddit input", async () => {
-    const { fetchSpy } = renderPanel();
+    const fetchSpy = vi.spyOn(global, "fetch");
+
+    renderPanel();
 
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ exists: true, name: "wallpapers", subscribers: 100000 }),
-    } as Response);
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ results: [] }),
     } as Response);
 
     const input = screen.getByPlaceholderText("e.g. earthporn");
@@ -245,66 +225,138 @@ describe("SettingsPanel", () => {
     expect(screen.getByText("Full")).toBeTruthy();
   });
 
-  it("shows suggestions when available", async () => {
-    const fetchSpy = vi.spyOn(global, "fetch");
-    // Initial suggestions fetch
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        results: [
-          { name: "NaturePics", subscribers: 50000, description: "Nature photos", over18: false },
-          { name: "WallpaperDump", subscribers: 30000, description: "Wallpapers", over18: false },
-        ],
-      }),
-    } as Response);
+  // ── Discover section tests ──
 
-    render(
-      <SettingsPanel
-        settings={DEFAULT_SETTINGS}
-        onSave={vi.fn()}
-        onClose={vi.fn()}
-        isLoading={false}
-        likedCount={0}
-      />
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Suggestions")).toBeTruthy();
-      expect(screen.getByText(/NaturePics/)).toBeTruthy();
-      expect(screen.getByText(/WallpaperDump/)).toBeTruthy();
-    });
+  it("shows Discover subreddits button when subreddits exist", () => {
+    renderPanel();
+    expect(screen.getByText("Discover subreddits")).toBeTruthy();
   });
 
-  it("adds suggestion to subreddit list when clicked", async () => {
+  it("does not show Discover when no subreddits", () => {
+    renderPanel({
+      settings: { ...DEFAULT_SETTINGS, subreddits: [] },
+    });
+    expect(screen.queryByText("Discover subreddits")).toBeNull();
+  });
+
+  it("fetches discoveries when Discover is opened", async () => {
     const fetchSpy = vi.spyOn(global, "fetch");
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         results: [
-          { name: "Photography", subscribers: 100000, description: "Photo sub", over18: false },
+          { name: "NaturePics", subscribers: 50000, description: "Nature photos", over18: false, score: 2000 },
+          { name: "WallpaperDump", subscribers: 30000, description: "Wallpapers galore", over18: false, score: 1500 },
         ],
       }),
     } as Response);
 
-    render(
-      <SettingsPanel
-        settings={DEFAULT_SETTINGS}
-        onSave={vi.fn()}
-        onClose={vi.fn()}
-        isLoading={false}
-        likedCount={0}
-      />
+    renderPanel();
+
+    fireEvent.click(screen.getByText("Discover subreddits"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/NaturePics/)).toBeTruthy();
+      expect(screen.getByText(/WallpaperDump/)).toBeTruthy();
+      expect(screen.getByText("Nature photos")).toBeTruthy();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/api/reddit/discover?seeds=")
     );
+  });
+
+  it("adds discovered subreddit when clicked", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch");
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          { name: "Photography", subscribers: 100000, description: "Photo sub", over18: false, score: 3000 },
+        ],
+      }),
+    } as Response);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Discover subreddits"));
 
     await waitFor(() => {
       expect(screen.getByText(/Photography/)).toBeTruthy();
     });
 
-    // Click the suggestion button
-    const suggestionBtn = screen.getByText(/Photography/).closest("button")!;
-    fireEvent.click(suggestionBtn);
+    const discoveryBtn = screen.getByText(/Photography/).closest("button")!;
+    fireEvent.click(discoveryBtn);
 
-    // Should now be in the subreddit tags
     expect(screen.getByText("r/photography")).toBeTruthy();
+  });
+
+  it("auto-refreshes discoveries when subreddits change", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch");
+
+    // First discover call
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          { name: "NaturePics", subscribers: 50000, description: "Nature", over18: false, score: 2000 },
+        ],
+      }),
+    } as Response);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Discover subreddits"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/NaturePics/)).toBeTruthy();
+    });
+
+    // Mock validation for adding a new sub
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ exists: true, name: "landscapes", subscribers: 80000 }),
+    } as Response);
+    // Mock the auto-refresh discover call
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          { name: "SkyPorn", subscribers: 40000, description: "Sky photos", over18: false, score: 1800 },
+        ],
+      }),
+    } as Response);
+
+    const input = screen.getByPlaceholderText("e.g. earthporn");
+    fireEvent.change(input, { target: { value: "landscapes" } });
+    fireEvent.click(screen.getAllByText("Add")[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("r/landscapes")).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/SkyPorn/)).toBeTruthy();
+    });
+  });
+
+  it("shows search autocomplete when typing in input", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch");
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          { name: "wallpapers", subscribers: 200000, description: "Wallpapers", over18: false },
+          { name: "wallpaperdump", subscribers: 50000, description: "Dumps", over18: false },
+        ],
+      }),
+    } as Response);
+
+    renderPanel();
+
+    const input = screen.getByPlaceholderText("e.g. earthporn");
+    fireEvent.change(input, { target: { value: "wallp" } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/wallpaperdump/)).toBeTruthy();
+    });
   });
 });
